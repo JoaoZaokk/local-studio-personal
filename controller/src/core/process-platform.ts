@@ -144,7 +144,11 @@ export const makeProcessPlatform = (options: ProcessPlatformOptions = {}): Proce
     if (startToken !== null) {
       return { state: "found", identity: { pid, commandLine: "", startToken } };
     }
-    return command.status === null ? { state: "unavailable" } : { state: "absent" };
+    // POSIX never reports "unavailable". `ps -o command= -p <pid>` costs milliseconds
+    // against a three second budget, so a failure here is not the routine false negative
+    // the Windows CIM query is, and the only caller that reads this state answers a
+    // question whose wrong answer signals a process group.
+    return { state: "absent" };
   };
 
   const list = (): ProcessIdentity[] => {

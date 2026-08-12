@@ -49,7 +49,7 @@ describe("a probe that could not answer is not a missing process", () => {
     });
   });
 
-  test("Linux without ps and without proc reports unavailable", () => {
+  test("Linux without ps and without proc reports absent", () => {
     const platform = makeProcessPlatform({
       platform: "linux",
       kill: () => {},
@@ -58,7 +58,7 @@ describe("a probe that could not answer is not a missing process", () => {
         throw new Error("ENOENT");
       },
     });
-    expect(platform.inspect(42)).toEqual({ state: "unavailable" });
+    expect(platform.inspect(42)).toEqual({ state: "absent" });
   });
 
   test("a ps that ran and found nothing still reports absent", () => {
@@ -68,6 +68,24 @@ describe("a probe that could not answer is not a missing process", () => {
       run: () => ({ status: 1, stdout: "" }),
     });
     expect(platform.inspect(42)).toEqual({ state: "absent" });
+  });
+
+  // owns() answers true on "unavailable" and its only caller uses that answer to
+  // release a SIGTERM/SIGKILL at the process group. macOS has no start token, so a
+  // "unavailable" here would reach that branch for every recycled pid.
+  test("darwin never reports unavailable, however ps fails", () => {
+    for (const result of [
+      { status: null, stdout: "" },
+      { status: 1, stdout: "" },
+      { status: 0, stdout: "" },
+    ]) {
+      const platform = makeProcessPlatform({
+        platform: "darwin",
+        kill: () => {},
+        run: () => result,
+      });
+      expect(platform.inspect(42)).toEqual({ state: "absent" });
+    }
   });
 });
 

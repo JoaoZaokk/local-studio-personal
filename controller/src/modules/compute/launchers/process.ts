@@ -61,10 +61,12 @@ export const makeProcessLauncher = (
       if (!processPlatform.alive(reference.pid)) return false;
       const lookup = processPlatform.inspect(reference.pid);
       if (lookup.state === "absent") return false;
-      // alive() answered through kill(pid, 0), which needs no subprocess, so the pid is
-      // known to exist here. A lookup that could not be answered — a timed-out
-      // Win32_Process query under load, a host without ps — is not evidence the process
-      // is gone, and disowning a live instance strands it holding its VRAM.
+      // Only the Windows arm can report this. Its Win32_Process query was measured at
+      // 40261ms cold under load against a 120s budget, so a timeout is a routine false
+      // negative there, and alive() has already proved the pid exists through
+      // kill(pid, 0), which spawns nothing and cannot time out. POSIX deliberately never
+      // reports it: ps is cheap, so a failure is not evidence either way, and answering
+      // true here would let stop() signal a process group we have not identified.
       if (lookup.state === "unavailable") return true;
       const identity = lookup.identity;
       // Start token is decisive where the OS provides one.
