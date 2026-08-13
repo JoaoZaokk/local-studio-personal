@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   isWindowsAbsolutePath,
   buildWslLaunchArguments,
+  isEnvironmentVariableName,
 } from "../src/modules/compute/launchers/wsl2";
 import {
   normalizeWslOutput,
@@ -61,6 +62,7 @@ describe("WSL2 launch contract", () => {
       "-c",
     ]);
     expect(args).toContain("ALPHA=first value");
+    expect(args[args.indexOf("/usr/bin/env") + 1]).toBe("--");
     expect(args).toContain("/home/user/.local/bin");
     expect(args).toContain("/mnt/f/logs/model.log");
     expect(args.indexOf("ALPHA=first value")).toBeLessThan(args.indexOf("ZED=last"));
@@ -69,6 +71,23 @@ describe("WSL2 launch contract", () => {
       "serve",
       "/mnt/f/Models/Qwen model",
     ]);
+  });
+
+  test("rejects environment names that GNU env could interpret as options", () => {
+    expect(isEnvironmentVariableName("CUDA_VISIBLE_DEVICES")).toBe(true);
+    expect(isEnvironmentVariableName("_LOCAL_STUDIO_2")).toBe(true);
+    expect(isEnvironmentVariableName("-S")).toBe(false);
+    expect(() =>
+      buildWslLaunchArguments(
+        "Ubuntu",
+        "/tmp/local-studio-nonce.pid",
+        "",
+        "nonce",
+        "/mnt/f/logs/model.log",
+        ["/usr/bin/vllm", "serve"],
+        { "-S": "-- /usr/bin/printf replaced" },
+      ),
+    ).toThrow("Invalid environment variable name: -S");
   });
 
   test("keeps a planned managed home path isolated as one argument", () => {
