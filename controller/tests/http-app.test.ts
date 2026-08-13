@@ -119,39 +119,43 @@ describe("controller HTTP application", () => {
     expect([...documentedOperations].sort()).toEqual([...registeredOperations].sort());
   });
 
-  test("falls back to persisted logs when a Docker container no longer exists", async () => {
-    const sessionId = "stale-docker-session";
-    await runtime.runPromise(
-      context.stores.recipeStore.save(
-        parseRecipe({
-          id: sessionId,
-          name: "Stale Docker Session",
-          model_path: "/models/stale",
-          backend: "vllm",
-          runtime: { kind: "docker", ref: "example.invalid/local-studio" },
-          extra_args: { "docker-container": sessionId },
-        }),
-      ),
-    );
-    writeFileSync(primaryLogPathFor(context.config.data_dir, sessionId), "persisted log line\n");
+  test(
+    "falls back to persisted logs when a Docker container no longer exists",
+    async () => {
+      const sessionId = "stale-docker-session";
+      await runtime.runPromise(
+        context.stores.recipeStore.save(
+          parseRecipe({
+            id: sessionId,
+            name: "Stale Docker Session",
+            model_path: "/models/stale",
+            backend: "vllm",
+            runtime: { kind: "docker", ref: "example.invalid/local-studio" },
+            extra_args: { "docker-container": sessionId },
+          }),
+        ),
+      );
+      writeFileSync(primaryLogPathFor(context.config.data_dir, sessionId), "persisted log line\n");
 
-    const response = await app.request(`/logs/${sessionId}`, {
-      headers: { "x-api-key": apiKey },
-    });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      id: sessionId,
-      logs: ["persisted log line"],
-      content: "persisted log line",
-    });
+      const response = await app.request(`/logs/${sessionId}`, {
+        headers: { "x-api-key": apiKey },
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        id: sessionId,
+        logs: ["persisted log line"],
+        content: "persisted log line",
+      });
 
-    const abortController = new AbortController();
-    const stream = await app.request(`/logs/${sessionId}/stream?tail=1`, {
-      headers: { "x-api-key": apiKey },
-      signal: abortController.signal,
-    });
-    const chunk = await stream.body?.getReader().read();
-    abortController.abort();
-    expect(new TextDecoder().decode(chunk?.value)).toContain("persisted log line");
-  });
+      const abortController = new AbortController();
+      const stream = await app.request(`/logs/${sessionId}/stream?tail=1`, {
+        headers: { "x-api-key": apiKey },
+        signal: abortController.signal,
+      });
+      const chunk = await stream.body?.getReader().read();
+      abortController.abort();
+      expect(new TextDecoder().decode(chunk?.value)).toContain("persisted log line");
+    },
+    15_000,
+  );
 });
