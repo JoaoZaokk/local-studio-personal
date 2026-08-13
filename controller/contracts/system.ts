@@ -91,6 +91,8 @@ export interface EngineJob {
 
 export type RuntimePlatformKind = "cuda" | "rocm" | "metal" | "unknown";
 
+export type RuntimeHostPlatform = "linux" | "darwin" | "win32";
+
 export type RuntimeRocmSmiTool = "amd-smi" | "rocm-smi";
 
 export type RuntimeGpuMonitoringTool =

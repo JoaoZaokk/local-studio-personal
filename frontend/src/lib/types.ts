@@ -35,6 +35,7 @@ export type {
   RuntimeGpuInfoSummary,
   RuntimeGpuMonitoringInfo,
   RuntimeGpuMonitoringTool,
+  RuntimeHostPlatform,
   RuntimeKind,
   RuntimePlatformInfo,
   RuntimePlatformKind,

@@ -7,7 +7,13 @@ import { ArrowUpCircle, Check, XCircle } from "@/ui/icon-registry";
 import { useRealtimeStatusStore } from "@/hooks/realtime-status-store";
 import { useMountSubscription } from "@/hooks/use-mount-subscription";
 import api from "@/lib/api/client";
-import type { EngineJob, RuntimeBackendInfo, RuntimeTarget, SystemRuntimeInfo } from "@/lib/types";
+import type {
+  EngineJob,
+  RuntimeBackendInfo,
+  RuntimeHostPlatform,
+  RuntimeTarget,
+  SystemRuntimeInfo,
+} from "@/lib/types";
 import { StatusPill, Spinner } from "@/ui";
 import { SettingsGroup, SettingsNotice } from "./settings-ui";
 import {
@@ -46,6 +52,7 @@ type UpgradeState = { status: "idle" | "upgrading" | "success" | "error"; messag
 export function EnginesSection({ runtime }: { runtime?: SystemRuntimeInfo | null }) {
   const { runtimeSummary, status, lease } = useRealtimeStatusStore();
   const [targets, setTargets] = useState<RuntimeTarget[]>([]);
+  const [hostPlatform, setHostPlatform] = useState<RuntimeHostPlatform | null>(null);
   const [jobs, setJobs] = useState<EngineJob[]>([]);
   const [lostJobNotice, setLostJobNotice] = useState<string | null>(null);
   const knownJobsRef = useRef<EngineJob[]>([]);
@@ -63,6 +70,7 @@ export function EnginesSection({ runtime }: { runtime?: SystemRuntimeInfo | null
     ]);
     if (targetPayload) {
       setTargets(targetPayload.targets);
+      setHostPlatform(targetPayload.platform);
     }
     if (!jobPayload) return;
     // Runtime jobs live in controller memory: a running job vanishing from a
@@ -120,6 +128,7 @@ export function EnginesSection({ runtime }: { runtime?: SystemRuntimeInfo | null
             <EngineRows
               activeBackend={activeBackend}
               jobs={jobs}
+              hostPlatform={hostPlatform}
               onJobCreated={refreshRuntimeJobs}
               view={engineRows}
             />
@@ -188,11 +197,13 @@ function gpuMonitorValue(gpuMon: SystemRuntimeInfo["gpu_monitoring"] | undefined
 
 function EngineRows({
   activeBackend,
+  hostPlatform,
   jobs,
   onJobCreated,
   view,
 }: {
   activeBackend?: string;
+  hostPlatform: RuntimeHostPlatform | null;
   jobs: EngineJob[];
   onJobCreated: () => Promise<void>;
   view: EngineRowsView;
@@ -246,7 +257,7 @@ function EngineRows({
 
   if (view.kind === "targets") {
     const discoveredTargets = view.targets.filter((target) => !isManagedRuntimeTarget(target));
-    const managedBackends = managedRuntimeBackendsFor(view.targets);
+    const managedBackends = managedRuntimeBackendsFor(hostPlatform, view.targets);
     return (
       <>
         {errorNotice}

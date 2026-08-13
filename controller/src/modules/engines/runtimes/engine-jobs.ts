@@ -70,6 +70,18 @@ const nowIso = (): string => new Date().toISOString();
 const isPlatformBackend = (backend: RuntimeJobBackend): backend is "cuda" | "rocm" =>
   backend === "cuda" || backend === "rocm";
 
+export const windowsRuntimeTargetError = (
+  platform: NodeJS.Platform,
+  backend: RuntimeJobBackend,
+  target: RuntimeTarget | null,
+): string | null => {
+  if (platform !== "win32" || !isManagedPythonBackend(backend)) return null;
+  if (target?.kind === "wsl2") return null;
+  return backend === "mlx"
+    ? "MLX is unavailable on Windows. Use an Apple Silicon or remote controller."
+    : `${backend} on Windows requires an explicit WSL2 runtime target or remote controller.`;
+};
+
 const createJobRecord = (options: CreateEngineJobOptions): EngineJob => ({
   id: randomUUID(),
   backend: isPlatformBackend(options.backend) ? "vllm" : options.backend,
@@ -241,6 +253,15 @@ const runJob = (
         (options.backend === "sglang" && process.platform === "win32"))
     ) {
       target = yield* getDefaultRuntimeTarget(config, options.backend, options.runningProcess);
+    }
+    const windowsTargetError = windowsRuntimeTargetError(process.platform, options.backend, target);
+    if (windowsTargetError) {
+      return yield* Effect.fail(
+        new EngineOperationError({
+          operation: "validate-runtime-target",
+          message: windowsTargetError,
+        }),
+      );
     }
     if (
       options.type === "uninstall" &&

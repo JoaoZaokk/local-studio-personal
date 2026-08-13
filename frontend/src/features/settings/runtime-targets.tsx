@@ -1,6 +1,6 @@
 "use client";
 
-import type { EngineBackend, EngineJob, RuntimeTarget } from "@/lib/types";
+import type { EngineBackend, EngineJob, RuntimeHostPlatform, RuntimeTarget } from "@/lib/types";
 import { type UiTone, Spinner } from "@/ui";
 import {
   DataRow,
@@ -48,9 +48,12 @@ export const MANAGED_RUNTIME_BACKENDS: readonly ManagedRuntimeInstallBackend[] =
 ] as const;
 
 export const managedRuntimeBackendsFor = (
+  platform: RuntimeHostPlatform | null | undefined,
   targets: RuntimeTarget[],
 ): readonly ManagedRuntimeInstallBackend[] =>
-  targets.some((target) => target.kind === "wsl2") ? [] : MANAGED_RUNTIME_BACKENDS;
+  !platform || platform === "win32" || targets.some((target) => target.kind === "wsl2")
+    ? []
+    : MANAGED_RUNTIME_BACKENDS;
 
 export const isRunningEngineJob = (job: EngineJob | undefined): boolean =>
   job?.status === "queued" || job?.status === "running";
