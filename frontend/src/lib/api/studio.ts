@@ -14,6 +14,7 @@ import type {
   StudioSettings,
   RuntimeBackendInfo,
   RuntimeCudaInfo,
+  RuntimeHostPlatform,
   RuntimeRocmInfo,
   RuntimeTarget,
 } from "../types";
@@ -208,7 +209,7 @@ export function createStudioApi(core: ApiCore) {
 
     getVllmRuntime: (): Promise<VllmRuntimeInfo> => core.request("/runtime/vllm"),
 
-    getRuntimeTargets: (): Promise<{ targets: RuntimeTarget[] }> =>
+    getRuntimeTargets: (): Promise<{ targets: RuntimeTarget[]; platform: RuntimeHostPlatform }> =>
       core.request("/runtime/targets"),
 
     createRuntimeJob: (payload: {
