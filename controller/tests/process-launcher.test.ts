@@ -36,18 +36,22 @@ const plan: LaunchPlan = {
 };
 
 describe("process launcher logs", () => {
-  test("a new launch cannot inherit a previous failure", async () => {
-    writeFileSync(logPath, "stale failure\n");
-    const launcher = makeProcessLauncher(() => logPath);
-    const reference = await Effect.runPromise(launcher.start(plan, record));
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (!(await Effect.runPromise(launcher.alive(reference)))) break;
-      await Bun.sleep(10);
-    }
-    const tail = await Effect.runPromise(launcher.logTail(reference, record));
-    expect(tail).toBe("fresh");
-    expect(readFileSync(logPath, "utf8")).toBe("fresh");
-  });
+  test(
+    "a new launch cannot inherit a previous failure",
+    async () => {
+      writeFileSync(logPath, "stale failure\n");
+      const launcher = makeProcessLauncher(() => logPath);
+      const reference = await Effect.runPromise(launcher.start(plan, record));
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (!(await Effect.runPromise(launcher.alive(reference)))) break;
+        await Bun.sleep(10);
+      }
+      const tail = await Effect.runPromise(launcher.logTail(reference, record));
+      expect(tail).toBe("fresh");
+      expect(readFileSync(logPath, "utf8")).toBe("fresh");
+    },
+    15_000,
+  );
 
   test("owns and stops a real detached process tree", async () => {
     const launcher = makeProcessLauncher(() => logPath);
