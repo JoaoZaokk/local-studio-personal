@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, test } from "node:test";
 
 describe("Windows controller installer", { skip: process.platform !== "win32" }, () => {
@@ -9,8 +10,9 @@ describe("Windows controller installer", { skip: process.platform !== "win32" },
     if (process.platform !== "win32") return;
 
     const script = resolve(process.cwd(), "..", "scripts", "install-controller.ps1");
-    const installDir = String.raw`F:\Local Studio ü\controller source`;
-    const dataDir = String.raw`F:\Local Studio ü\controller data`;
+    const baseDir = join(tmpdir(), "Local Studio ü");
+    const installDir = join(baseDir, "controller source");
+    const dataDir = join(baseDir, "controller data");
     const output = execFileSync(
       "powershell.exe",
       [
@@ -39,11 +41,8 @@ describe("Windows controller installer", { skip: process.platform !== "win32" },
     };
 
     assert.equal(plan.taskName, "Local Studio Controller-18080");
-    assert.equal(
-      plan.runnerPath,
-      String.raw`F:\Local Studio ü\controller data\controller-18080.ps1`,
-    );
-    assert.equal(plan.environmentPath, String.raw`F:\Local Studio ü\controller source\.env`);
+    assert.equal(plan.runnerPath, join(dataDir, "controller-18080.ps1"));
+    assert.equal(plan.environmentPath, join(installDir, ".env"));
     assert.match(plan.arguments, /controller-18080\.ps1/);
     assert.doesNotMatch(plan.arguments, /API_KEY|api.key/i);
   });
