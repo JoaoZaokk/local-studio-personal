@@ -578,7 +578,7 @@ test("signed sessions.read exports the exact canonical identity and deterministi
     installationId: CONTROLLER_ID,
     sessionId: fixture.sessionId,
   });
-  assert.equal(page.metadata.cwd, realpathSync(fixture.project));
+  assert.equal(page.metadata.cwd, realpathSync.native(fixture.project));
   assert.equal(page.metadata.modelId, "model-a");
   assert.equal(page.metadata.providerId, "provider-a");
   assert.deepEqual(
