@@ -1,5 +1,12 @@
 # Local Studio
 
+> This repository is an independent personal and community edition maintained
+> by [JoaoZaokk](https://github.com/JoaoZaokk). It preserves upstream Local
+> Studio attribution and licensing while developing practical Windows support
+> and other user-focused improvements. It is not the upstream release channel
+> and is not maintained with the expectation that every change will be merged
+> upstream. See [Personal edition](docs/personal-edition.md).
+
 Local Studio is a local-first workstation for running, managing, and using
 self-hosted LLM backends. One machine can launch models, watch GPU/runtime
 state, chat with OpenAI-compatible endpoints, and run agent sessions against
