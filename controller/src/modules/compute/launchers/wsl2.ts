@@ -8,6 +8,7 @@ import { readLogTail, spawnFailed, type Launcher } from "./launcher";
 
 const START_TIMEOUT_MS = 10_000;
 const STOP_POLL_MS = 250;
+const ENVIRONMENT_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const WRAPPER =
   'pid_file=$1; workdir=$2; nonce=$3; log_file=$4; binary_dir=$5; shift 5; if [ -n "$workdir" ]; then cd -- "$workdir" || exit 126; fi; if [ -n "$binary_dir" ]; then PATH="$binary_dir:$PATH"; export PATH; fi; start_token=$(/usr/bin/awk \'{print $22}\' /proc/$$/stat) || exit 126; /usr/bin/printf \'%s %s %s\\n\' "$$" "$start_token" "$nonce" > "$pid_file" || exit 126; exec >> "$log_file" 2>&1; exec "$@"';
 
@@ -20,6 +21,9 @@ interface WslIdentity {
 export const isWindowsAbsolutePath = (value: string): boolean =>
   /^[a-zA-Z]:[\\/]/.test(value) || /^\\\\/.test(value);
 
+export const isEnvironmentVariableName = (value: string): boolean =>
+  ENVIRONMENT_VARIABLE_NAME.test(value);
+
 export const buildWslLaunchArguments = (
   distribution: string,
   pidFile: string,
@@ -28,27 +32,31 @@ export const buildWslLaunchArguments = (
   logFile: string,
   argv: readonly string[],
   env: Readonly<Record<string, string>>,
-): string[] => [
-  "--distribution",
-  distribution,
-  "--exec",
-  "/usr/bin/setsid",
-  "--wait",
-  "/bin/sh",
-  "-c",
-  WRAPPER,
-  "local-studio",
-  pidFile,
-  workdir,
-  nonce,
-  logFile,
-  argv[0]?.includes("/") ? posix.dirname(argv[0]) : "",
-  "/usr/bin/env",
-  ...Object.entries(env)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${key}=${value}`),
-  ...argv,
-];
+): string[] => {
+  const environment = Object.entries(env).sort(([left], [right]) => left.localeCompare(right));
+  const invalidName = environment.find(([key]) => !isEnvironmentVariableName(key))?.[0];
+  if (invalidName) throw new Error(`Invalid environment variable name: ${invalidName}`);
+  return [
+    "--distribution",
+    distribution,
+    "--exec",
+    "/usr/bin/setsid",
+    "--wait",
+    "/bin/sh",
+    "-c",
+    WRAPPER,
+    "local-studio",
+    pidFile,
+    workdir,
+    nonce,
+    logFile,
+    argv[0]?.includes("/") ? posix.dirname(argv[0]) : "",
+    "/usr/bin/env",
+    "--",
+    ...environment.map(([key, value]) => `${key}=${value}`),
+    ...argv,
+  ];
+};
 
 const parseIdentity = (value: string): WslIdentity | null => {
   const match = value.trim().match(/^(\d+)\s+(\S+)\s+(\S+)$/);
