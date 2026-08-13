@@ -1,0 +1,140 @@
+appId: org.local.studio.desktop
+productName: Local Studio
+asar: true
+
+afterPack: ./desktop/project.mjs
+
+asarUnpack:
+  - "node_modules/@lydell/**/*.node"
+  - "node_modules/@lydell/**/spawn-helper"
+
+files:
+  - desktop/dist/**
+  - package.json
+  - node_modules/@lydell/node-pty/**
+  - node_modules/@lydell/node-pty-${platform}-${arch}/**
+  # electron-builder auto-includes EVERY production dependency, but the Electron
+  # main process only requires electron, electron-updater, effect and node-pty
+  # (verified: those are the only non-relative requires in desktop/dist). The web
+  # app is NOT loaded from the asar — app-server.ts forks
+  # .next/standalone/server.js, which ships separately under extraResources with
+  # its own output-traced node_modules. Dropping the framework and its build-time
+  # toolchain from the asar takes it from 494 MB to 336 MB.
+  #
+  # NB: a stricter "!node_modules/** + re-add the transitive closure" inversion
+  # gets the asar to 40 MB but the packaged app then hangs before its first log
+  # line, so it is deliberately not used. Re-attempt only with a passing
+  # `npm run desktop:smoke`.
+  - "!node_modules/next/**"
+  - "!node_modules/@next/**"
+  - "!node_modules/react/**"
+  - "!node_modules/react-dom/**"
+  - "!node_modules/typescript/**"
+  - "!node_modules/@img/**"
+  - "!node_modules/sharp/**"
+  - "!node_modules/playwright-core/**"
+  - "!node_modules/@playwright/**"
+
+extraResources:
+  - from: desktop/resources/app-update.yml
+    to: app-update.yml
+  - from: ../services/agent-runtime/dist/standalone.mjs
+    to: app/agent-runtime/standalone.mjs
+  - from: ../services/agent-runtime/dist/node_modules/playwright-core
+    to: app/agent-runtime/node_modules/playwright-core
+  - from: ../services/agent-runtime/dist/node_modules/chromium-bidi
+    to: app/agent-runtime/node_modules/chromium-bidi
+  - from: ../services/agent-runtime/dist/node_modules/chromium-bidi/node_modules/zod
+    to: app/agent-runtime/node_modules/chromium-bidi/node_modules/zod
+  - from: ../services/agent-runtime/dist/node_modules/mitt
+    to: app/agent-runtime/node_modules/mitt
+  - from: ../services/agent-runtime/dist/node_modules/devtools-protocol
+    to: app/agent-runtime/node_modules/devtools-protocol
+  - from: ../services/agent-runtime/dist/node_modules/@silvia-odwyer/photon-node
+    to: app/agent-runtime/node_modules/@silvia-odwyer/photon-node
+  - from: ../services/agent-runtime/dist/node_modules/undici
+    to: app/agent-runtime/node_modules/undici
+  # Server-side terminals: node-pty is dynamically required by pty-service, so
+  # it ships as real files next to standalone.mjs (native addon, cannot bundle).
+  - from: ../services/agent-runtime/dist/node_modules/@lydell
+    to: app/agent-runtime/node_modules/@lydell
+  - from: .next/standalone
+    to: app/frontend/.next/standalone
+    filter:
+      - "**/*"
+      - "!data/**"
+      - "!frontend/data/**"
+      - "!**/dist-desktop/**"
+      - "!**/*.log"
+  - from: .next/static
+    to: app/frontend/.next/standalone/.next/static
+    filter:
+      - "**/*"
+  - from: .next/static
+    to: app/frontend/.next/standalone/frontend/.next/static
+    filter:
+      - "**/*"
+  - from: public
+    to: app/frontend/.next/standalone/public
+    filter:
+      - "**/*"
+  - from: public
+    to: app/frontend/.next/standalone/frontend/public
+    filter:
+      - "**/*"
+  - from: ../scripts/install-controller.sh
+    to: app/scripts/install-controller.sh
+  - from: ../scripts/install-controller.ps1
+    to: app/scripts/install-controller.ps1
+  - from: desktop/resources/pi-extensions
+    to: desktop/resources/pi-extensions
+    filter:
+      - "**/*"
+  - from: desktop/resources/mcp
+    to: desktop/resources/mcp
+    filter:
+      - "**/*"
+  - from: desktop/resources/plugins
+    to: desktop/resources/plugins
+    filter:
+      - "**/*"
+  - from: desktop/resources/skills
+    to: desktop/resources/skills
+    filter:
+      - "**/*"
+
+directories:
+  output: dist-desktop
+  buildResources: desktop/resources
+
+mac:
+  icon: desktop/resources/icon.icns
+  category: public.app-category.developer-tools
+  identity: "sherif cherfa (TZ447KHNZL)"
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: desktop/resources/entitlements.mac.plist
+  entitlementsInherit: desktop/resources/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: Record your own voice to create a private, local voice profile.
+
+dmg:
+  sign: true
+
+win:
+  icon: desktop/resources/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+linux:
+  target:
+    - AppImage

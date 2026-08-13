@@ -1,0 +1,126 @@
+"use client";
+
+import type { CSSProperties, ReactNode } from "react";
+import { useMountSubscription } from "@/hooks/use-mount-subscription";
+import { X } from "@/ui/icon-registry";
+import { Button } from "./button";
+import { cx } from "./utils";
+
+export function Drawer({
+  children,
+  width = 720,
+  className,
+  style,
+}: {
+  children: ReactNode;
+  width?: number;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <aside
+      className={cx(
+        "relative flex shrink-0 flex-col border-l border-(--color-popover-border) bg-(--color-popover) shadow-[-24px_0_80px_rgba(0,0,0,0.38)]",
+        className,
+      )}
+      style={{
+        width: `${width}px`,
+        minWidth: "min(420px, 40%)",
+        maxWidth: "min(960px, 76%)",
+        ...style,
+      }}
+    >
+      {children}
+    </aside>
+  );
+}
+
+export function DrawerOverlay({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  useMountSubscription(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/30"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        aria-modal="true"
+        className="flex h-full"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function DrawerHeader({
+  title,
+  icon,
+  badge,
+  actions,
+  onClose,
+  className,
+}: {
+  title: ReactNode;
+  icon?: ReactNode;
+  badge?: ReactNode;
+  actions?: ReactNode;
+  onClose?: () => void;
+  className?: string;
+}) {
+  return (
+    <header
+      className={cx(
+        "flex h-10 shrink-0 items-center gap-2 border-b border-(--border) bg-(--color-popover-header) px-3 text-[length:var(--fs-sm)]",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        {icon}
+        <span className="truncate font-medium text-(--ui-fg)/85">{title}</span>
+        {badge}
+      </div>
+      {actions ? <div className="flex shrink-0 items-center gap-1.5">{actions}</div> : null}
+      {onClose ? (
+        <Button variant="icon" size="sm" onClick={onClose} aria-label="Close" title="Close">
+          <X className="h-3 w-3" />
+        </Button>
+      ) : null}
+    </header>
+  );
+}
+
+export function DrawerBody({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cx("min-h-0 flex-1 overflow-y-auto p-4", className)}>{children}</div>;
+}
+
+export function DrawerFooter({
+  status,
+  children,
+  className,
+}: {
+  status?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <footer
+      className={cx(
+        "flex h-11 shrink-0 items-center justify-between gap-3 border-t border-(--border) bg-(--color-popover-header) px-3 text-[length:var(--fs-sm)]",
+        className,
+      )}
+    >
+      <div className="min-w-0 truncate text-(--ui-muted)/75">{status}</div>
+      {children ? <div className="flex shrink-0 items-center gap-1">{children}</div> : null}
+    </footer>
+  );
+}
