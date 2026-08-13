@@ -41,8 +41,10 @@ describe("Windows controller installer", { skip: process.platform !== "win32" },
     };
 
     assert.equal(plan.taskName, "Local Studio Controller-18080");
-    assert.equal(plan.runnerPath, join(dataDir, "controller-18080.ps1"));
-    assert.equal(plan.environmentPath, join(installDir, ".env"));
+    assert.ok(
+      plan.runnerPath.endsWith(join("Local Studio ü", "controller data", "controller-18080.ps1")),
+    );
+    assert.ok(plan.environmentPath.endsWith(join("Local Studio ü", "controller source", ".env")));
     assert.match(plan.arguments, /controller-18080\.ps1/);
     assert.doesNotMatch(plan.arguments, /API_KEY|api.key/i);
   });
