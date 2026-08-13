@@ -5,6 +5,9 @@ import { describe, test } from "node:test";
 
 describe("Windows controller installer", { skip: process.platform !== "win32" }, () => {
   test("plans a port-scoped user task without putting secrets in its command", () => {
+    // Bun currently ignores the node:test skip option on describe blocks.
+    if (process.platform !== "win32") return;
+
     const script = resolve(process.cwd(), "..", "scripts", "install-controller.ps1");
     const installDir = String.raw`F:\Local Studio ü\controller source`;
     const dataDir = String.raw`F:\Local Studio ü\controller data`;
