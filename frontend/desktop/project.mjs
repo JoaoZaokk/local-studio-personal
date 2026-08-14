@@ -888,14 +888,14 @@ async function terminate(child) {
     } catch {}
 }
 async function removeSmokeDirectory(directory) {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
       rmSync4(directory, { recursive: !0, force: !0 });
       return;
     } catch (error) {
-      if (attempt === 19 || !["EBUSY", "EPERM", "ENOTEMPTY"].includes(error?.code))
+      if (attempt === 59 || !["EBUSY", "EPERM", "ENOTEMPTY"].includes(error?.code))
         throw error;
-      await delay(250);
+      await delay(500);
     }
   }
 }
