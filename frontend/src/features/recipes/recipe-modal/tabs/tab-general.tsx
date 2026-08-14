@@ -147,7 +147,7 @@ export function RecipeModalTabGeneral({
         <FormField
           label="Model weights"
           required
-          description={isCustomPath ? `Downloaded path: ${recipe.model_path}` : undefined}
+          description="Choose discovered weights, or enter an exact path on the controller. llama.cpp requires a .gguf file."
         >
           <div className="flex items-center gap-2.5">
             <ModelLogo
@@ -171,6 +171,16 @@ export function RecipeModalTabGeneral({
               })}
             </Select>
           </div>
+          <Input
+            value={isCustomPath ? recipe.model_path : ""}
+            onChange={(event) => onChange({ ...recipe, model_path: event.target.value })}
+            placeholder={
+              backend === "llamacpp"
+                ? "Exact .gguf path on the controller"
+                : "Exact model directory on the controller"
+            }
+            aria-label="Exact model path on controller"
+          />
         </FormField>
       </FormSection>
 
