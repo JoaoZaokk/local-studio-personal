@@ -23,4 +23,16 @@ describe("development scripts", () => {
     expect(script).toContain('"npm run desktop:start:dev"');
     expect(script).not.toContain("node -e");
   });
+
+  test("watches agent runtime imports from the repository root", () => {
+    const rootManifest = readManifest(resolve(process.cwd(), "..", "package.json"));
+    const runtimeManifest = readManifest(
+      resolve(process.cwd(), "..", "services", "agent-runtime", "package.json"),
+    );
+
+    expect(rootManifest.scripts["dev:agent-runtime:watch"]).toBe(
+      "bun --watch services/agent-runtime/src/server.ts",
+    );
+    expect(runtimeManifest.scripts.dev).toBe("npm --prefix ../.. run dev:agent-runtime:watch");
+  });
 });
