@@ -107,7 +107,7 @@ var init_assert_standalone_build = __esm(() => {
   if (piRuntimeEntries.length !== 2 || piRuntimeEntries.some((entry) => !existsSync2(entry)))
     throw Error("Missing packaged Pi runtime entrypoints");
   for (let entry of piRuntimeEntries) {
-    let importCheck = spawnSync(process.execPath, ["--input-type=module", "--eval", `import(${JSON.stringify(pathToFileURL(entry).href)})`], { cwd: runtimeRoot, encoding: "utf8" });
+    let importCheck = spawnSync(process.execPath, ["--input-type=module", "--eval", `import(${JSON.stringify(pathToFileURL(entry).href)}).then(() => process.exit(0), (error) => { console.error(error); process.exit(1); })`], { cwd: runtimeRoot, encoding: "utf8" });
     if (importCheck.status !== 0)
       throw Error(`Standalone Pi runtime entrypoint is not importable: ${importCheck.stderr || importCheck.stdout}`);
   }
