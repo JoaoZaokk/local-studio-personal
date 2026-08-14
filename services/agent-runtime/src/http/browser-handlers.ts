@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { sanitizeBrowserPaneUrl } from "../../../../shared/agent/sanitize-embedded-browser-url";
 import { browserHost, type KeyInput, type MouseInput } from "../browser-host/browser-host";
-import { fetchReadable } from "../browser-host/reader";
+import { fetchBrowserPaneReadable, fetchReadable } from "../browser-host/reader";
 
 const ALLOWED_VERBS = new Set([
   "navigate",
@@ -141,7 +141,7 @@ async function fallbackVerb(verb: string, payload: Record<string, unknown>): Pro
   if (verb === "navigate") {
     const url = sanitizeBrowserPaneUrl(String(payload.url ?? ""));
     if (!url) return { ok: false, error: "valid public or localhost http(s) url required" };
-    const reader = await fetchReadable(url);
+    const reader = await fetchBrowserPaneReadable(url);
     lastFallbackUrl = reader.url;
     return { ok: true, data: { url: reader.url, title: reader.title, readingMode: true } };
   }
@@ -151,7 +151,7 @@ async function fallbackVerb(verb: string, payload: Record<string, unknown>): Pro
   if (verb === "get-text" || verb === "get-html") {
     const url = sanitizeBrowserPaneUrl(String(payload.url ?? "")) || lastFallbackUrl;
     if (!url) return { ok: false, error: UNAVAILABLE_ERROR };
-    const reader = await fetchReadable(url);
+    const reader = await fetchBrowserPaneReadable(url);
     lastFallbackUrl = reader.url;
     return verb === "get-text"
       ? { ok: true, data: { text: reader.text, readingMode: true } }

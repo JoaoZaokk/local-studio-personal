@@ -10,7 +10,10 @@
 import { lookup } from "node:dns/promises";
 import { request as httpRequest, type RequestOptions } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { sanitizePublicBrowserUrl } from "../../../../shared/agent/sanitize-embedded-browser-url";
+import {
+  sanitizeBrowserPaneUrl,
+  sanitizePublicBrowserUrl,
+} from "../../../../shared/agent/sanitize-embedded-browser-url";
 
 const MAX_BYTES = 512 * 1024;
 const FETCH_TIMEOUT_MS = 12_000;
@@ -127,16 +130,22 @@ function cleanMarkdown(markdown: string): string {
     .trim();
 }
 
-async function fetchBoundedUrl(url: string, redirects = 0): Promise<BoundedResponse> {
-  const addresses = await publicResolvedAddresses(url);
+type ReaderUrlPolicy = "public" | "pane";
+
+async function fetchBoundedUrl(
+  url: string,
+  policy: ReaderUrlPolicy,
+  redirects = 0,
+): Promise<BoundedResponse> {
+  const addresses = await resolvedAddresses(url, policy);
   const response = await requestBoundedUrl(url, addresses[0]);
   if (isRedirectStatus(response.status)) {
     if (redirects >= MAX_REDIRECTS) throw new Error("Too many redirects");
     if (!response.location) throw new Error("Redirect missing Location header");
     const nextUrl = new URL(response.location, url).toString();
-    const safeRedirect = sanitizePublicBrowserUrl(nextUrl);
-    if (!safeRedirect) throw new Error("Redirect rejected (must stay public http/https)");
-    return fetchBoundedUrl(safeRedirect, redirects + 1);
+    const safeRedirect = sanitizeReaderUrl(nextUrl, policy);
+    if (!safeRedirect) throw new Error("Redirect rejected by browser URL policy");
+    return fetchBoundedUrl(safeRedirect, policy, redirects + 1);
   }
   return response;
 }
@@ -145,13 +154,25 @@ function isRedirectStatus(status: number): boolean {
   return status >= 300 && status < 400;
 }
 
-async function publicResolvedAddresses(raw: string): Promise<ResolvedHostAddress[]> {
+function sanitizeReaderUrl(raw: string, policy: ReaderUrlPolicy): string | null {
+  return policy === "pane" ? sanitizeBrowserPaneUrl(raw) : sanitizePublicBrowserUrl(raw);
+}
+
+async function resolvedAddresses(
+  raw: string,
+  policy: ReaderUrlPolicy,
+): Promise<ResolvedHostAddress[]> {
   const url = new URL(raw);
   const addresses = await resolveReaderHost(url.hostname);
   if (!addresses.length) throw new Error("Host resolved to no addresses");
+  const loopbackOnly = policy === "pane" && sanitizePublicBrowserUrl(raw) === null;
   for (const address of addresses) {
-    if (!sanitizePublicBrowserUrl(`${url.protocol}//${hostForAddress(address.address)}/`)) {
-      throw new Error("Resolved host rejected (must stay public http/https)");
+    const resolvedUrl = `${url.protocol}//${hostForAddress(address.address)}/`;
+    const safe = loopbackOnly
+      ? sanitizeBrowserPaneUrl(resolvedUrl) && !sanitizePublicBrowserUrl(resolvedUrl)
+      : sanitizePublicBrowserUrl(resolvedUrl);
+    if (!safe) {
+      throw new Error("Resolved host rejected by browser URL policy");
     }
   }
   return addresses;
@@ -276,7 +297,15 @@ function renderReadable(response: BoundedResponse, fallbackUrl: string): ReaderR
 export async function fetchReadable(rawUrl: string): Promise<ReaderResult> {
   const safe = sanitizePublicBrowserUrl(rawUrl);
   if (!safe) throw new Error("url rejected (must be public http/https)");
-  const response = await fetchBoundedUrl(safe);
+  const response = await fetchBoundedUrl(safe, "public");
+  if (!response.ok) throw new Error(`Upstream returned HTTP ${response.status}`);
+  return renderReadable(response, safe);
+}
+
+export async function fetchBrowserPaneReadable(rawUrl: string): Promise<ReaderResult> {
+  const safe = sanitizeBrowserPaneUrl(rawUrl);
+  if (!safe) throw new Error("url rejected (must be public or loopback http/https)");
+  const response = await fetchBoundedUrl(safe, "pane");
   if (!response.ok) throw new Error(`Upstream returned HTTP ${response.status}`);
   return renderReadable(response, safe);
 }
