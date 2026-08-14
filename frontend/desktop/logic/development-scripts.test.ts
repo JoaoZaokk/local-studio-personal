@@ -24,6 +24,15 @@ describe("development scripts", () => {
     expect(script).not.toContain("node -e");
   });
 
+  test("waits for Next and the shared agent runtime before starting Electron", () => {
+    const startDev = readFileSync(resolve(process.cwd(), "desktop", "start-dev.mjs"), "utf8");
+
+    expect(startDev).toContain('const devServerUrl = "http://127.0.0.1:3000"');
+    expect(startDev).toContain('const agentRuntimeUrl = "http://127.0.0.1:8081/health"');
+    expect(startDev).toContain("await Promise.all");
+    expect(startDev).not.toContain("setTimeout(resolve, 3000)");
+  });
+
   test("watches agent runtime imports from the repository root", () => {
     const rootManifest = readManifest(resolve(process.cwd(), "..", "package.json"));
     const runtimeManifest = readManifest(
