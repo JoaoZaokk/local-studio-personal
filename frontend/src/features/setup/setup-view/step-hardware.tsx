@@ -37,7 +37,14 @@ export function StepHardware({
   const managedBackends =
     diagnostics?.platform === "darwin" && diagnostics.arch === "arm64"
       ? (["mlx"] as const)
-      : managedRuntimeBackendsFor(runtimeTargets);
+      : managedRuntimeBackendsFor(
+          diagnostics?.platform === "win32"
+            ? "win32"
+            : diagnostics?.platform === "darwin"
+              ? "darwin"
+              : "linux",
+          runtimeTargets,
+        );
   const visibleTargets = runtimeTargets
     .filter(
       (target) =>
