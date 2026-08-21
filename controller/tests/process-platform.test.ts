@@ -1,5 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { makeProcessPlatform, parseWindowsProcessList } from "../src/core/process-platform";
+import {
+  commandTimeoutMs,
+  makeProcessPlatform,
+  parseWindowsProcessList,
+} from "../src/core/process-platform";
+
+describe("process command budget", () => {
+  test("keeps the POSIX inspection budget at the pre-port three seconds", () => {
+    expect(commandTimeoutMs("darwin")).toBe(3_000);
+    expect(commandTimeoutMs("linux")).toBe(3_000);
+  });
+
+  test("gives Windows a wider budget so a cold PowerShell start is not read as a dead process", () => {
+    expect(commandTimeoutMs("win32")).toBe(10_000);
+  });
+});
 
 describe("Windows process platform", () => {
   test("parses CIM process identities without inventing missing values", () => {

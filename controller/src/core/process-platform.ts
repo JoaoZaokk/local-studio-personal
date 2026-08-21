@@ -25,14 +25,28 @@ type ProcessPlatformOptions = {
   readFile?: (path: string) => string;
 };
 
-const runCommand: CommandRunner = (command, args) => {
-  try {
-    const result = spawnSync(command, args, { encoding: "utf8", windowsHide: true });
-    return { status: result.status, stdout: result.stdout?.trim() ?? "" };
-  } catch {
-    return { status: null, stdout: "" };
-  }
-};
+const POSIX_COMMAND_TIMEOUT_MS = 3_000;
+const WINDOWS_COMMAND_TIMEOUT_MS = 10_000;
+
+export const commandTimeoutMs = (platform: NodeJS.Platform): number =>
+  platform === "win32" ? WINDOWS_COMMAND_TIMEOUT_MS : POSIX_COMMAND_TIMEOUT_MS;
+
+const syncRunner =
+  (timeoutMs: number): CommandRunner =>
+  (command, args) => {
+    try {
+      const result = spawnSync(command, args, {
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: timeoutMs,
+      });
+      return { status: result.status, stdout: result.stdout?.trim() ?? "" };
+    } catch {
+      return { status: null, stdout: "" };
+    }
+  };
+
+const runCommand: CommandRunner = syncRunner(commandTimeoutMs(process.platform));
 
 export const splitProcessCommandLine = (command: string): string[] =>
   (command.match(/(?:[^\s"]+|"[^"]*")+/g) ?? []).map((token) => token.replace(/^"|"$/g, ""));
@@ -84,7 +98,7 @@ const windowsPowerShell = (run: CommandRunner, script: string): CommandResult =>
 
 export const makeProcessPlatform = (options: ProcessPlatformOptions = {}): ProcessPlatform => {
   const platform = options.platform ?? process.platform;
-  const run = options.run ?? runCommand;
+  const run = options.run ?? syncRunner(commandTimeoutMs(platform));
   const kill = options.kill ?? process.kill;
   const readFile = options.readFile ?? ((path: string): string => readFileSync(path, "utf8"));
 
