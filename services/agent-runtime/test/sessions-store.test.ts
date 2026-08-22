@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,11 +12,20 @@ import {
 } from "../src/sessions-store";
 
 const originalPiCodingAgentDir = process.env.PI_CODING_AGENT_DIR;
+const originalDataDir = process.env.LOCAL_STUDIO_DATA_DIR;
 const temporaryRoots: string[] = [];
+
+beforeEach(() => {
+  const dataDir = mkdtempSync(path.join(tmpdir(), "sessions-store-data-"));
+  temporaryRoots.push(dataDir);
+  process.env.LOCAL_STUDIO_DATA_DIR = dataDir;
+});
 
 afterEach(() => {
   if (originalPiCodingAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
   else process.env.PI_CODING_AGENT_DIR = originalPiCodingAgentDir;
+  if (originalDataDir === undefined) delete process.env.LOCAL_STUDIO_DATA_DIR;
+  else process.env.LOCAL_STUDIO_DATA_DIR = originalDataDir;
   for (const root of temporaryRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
