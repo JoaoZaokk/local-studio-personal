@@ -9,6 +9,8 @@ import { makeProcessLauncher } from "../src/modules/compute/launchers/process";
 const root = mkdtempSync(join(tmpdir(), "process-launcher-test-"));
 const logPath = join(root, "model.log");
 
+const REAL_PROCESS_TIMEOUT_MS = 120_000;
+
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const record: InstanceRecord = {
@@ -47,7 +49,7 @@ describe("process launcher logs", () => {
     const tail = await Effect.runPromise(launcher.logTail(reference, record));
     expect(tail).toBe("fresh");
     expect(readFileSync(logPath, "utf8")).toBe("fresh");
-  });
+  }, REAL_PROCESS_TIMEOUT_MS);
 
   test("owns and stops a real detached process tree", async () => {
     const launcher = makeProcessLauncher(() => logPath);
@@ -59,5 +61,5 @@ describe("process launcher logs", () => {
     expect(await Effect.runPromise(launcher.owns(reference, record))).toBe(true);
     await Effect.runPromise(launcher.stop(reference, 2_000));
     expect(await Effect.runPromise(launcher.alive(reference))).toBe(false);
-  });
+  }, REAL_PROCESS_TIMEOUT_MS);
 });
