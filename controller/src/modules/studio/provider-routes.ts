@@ -4,7 +4,6 @@ import { decodeJsonBody } from "../../core/validation";
 import { effectHandler } from "../../http/effect-handler";
 import { documentRoute, defineRoutes, mergeRoutes } from "../../http/route-registrar";
 import { savePersistedConfig, type ProviderConfig } from "../../config/persisted-config";
-import { fetchConfiguredProviderModels } from "../../services/provider-models";
 
 type ProviderView = {
   id: string;
@@ -27,6 +26,10 @@ const ProviderUpdateSchema = Schema.Struct({
   base_url: Schema.optional(Schema.String),
   api_key: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
+});
+
+const ProviderModelsSchema = Schema.Struct({
+  data: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.optional(Schema.String) }))),
 });
 
 class ProviderPersistenceError extends Schema.TaggedErrorClass<ProviderPersistenceError>()(
@@ -62,6 +65,32 @@ const required = (
   const trimmed = value.trim();
   return trimmed ? Effect.succeed(trimmed) : Effect.fail(badRequest(`${label} is required`));
 };
+
+const providerModels = (
+  provider: ProviderConfig,
+): Effect.Effect<{ provider: string; models: Array<{ id: string }> }, unknown> =>
+  Effect.gen(function* () {
+    const url = `${provider.base_url.replace(/\/+$/, "")}/v1/models`;
+    const response = yield* Effect.tryPromise({
+      try: () =>
+        fetch(url, {
+          headers: { Authorization: `Bearer ${provider.api_key}` },
+          signal: AbortSignal.timeout(10_000),
+        }),
+      catch: (source) => source,
+    });
+    if (!response.ok) return yield* Effect.fail(response.status);
+    const payload = yield* Effect.tryPromise({
+      try: () => response.json(),
+      catch: (source) => source,
+    });
+    const decoded = yield* Schema.decodeUnknownEffect(ProviderModelsSchema)(payload);
+    const models = (decoded.data ?? []).flatMap((model) => {
+      const id = model.id?.trim();
+      return id ? [{ id }] : [];
+    });
+    return { provider: provider.id, models };
+  });
 
 export const registerStudioProviderRoutes = defineRoutes((app, context) => {
   return mergeRoutes(
@@ -152,10 +181,16 @@ export const registerStudioProviderRoutes = defineRoutes((app, context) => {
       "/studio/provider-models",
       documentRoute,
       effectHandler((ctx) =>
-        fetchConfiguredProviderModels(context.config.providers).pipe(
-          Effect.map((providers) =>
+        Effect.forEach(
+          context.config.providers.filter((provider) => provider.enabled && provider.api_key),
+          (provider) => providerModels(provider).pipe(Effect.option),
+          { concurrency: "unbounded" },
+        ).pipe(
+          Effect.map((results) =>
             ctx.json({
-              providers: providers.map(({ provider, models }) => ({ provider, models })),
+              providers: results.flatMap((result) =>
+                result._tag === "Some" ? [result.value] : [],
+              ),
             }),
           ),
         ),

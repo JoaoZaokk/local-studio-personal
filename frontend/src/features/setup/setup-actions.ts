@@ -152,13 +152,7 @@ export function connectRemotePresetEffect(
     );
     const alreadyThere = existing.providers.some((provider) => provider.id === preset.id);
     if (alreadyThere) {
-      yield* requestEffect(() =>
-        api.updateProvider(preset.id, {
-          base_url: remote.base_url,
-          api_key: apiKey,
-          enabled: true,
-        }),
-      );
+      yield* requestEffect(() => api.updateProvider(preset.id, { api_key: apiKey, enabled: true }));
     } else {
       yield* requestEffect(() =>
         api.createProvider({

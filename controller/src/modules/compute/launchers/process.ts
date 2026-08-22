@@ -42,10 +42,11 @@ export const makeProcessLauncher = (
       closeSync(logFd);
       if (pid <= 0) return yield* spawnFailed(`failed to spawn ${binary}`);
       child.unref();
+      const spawned = processPlatform.inspect(pid);
       return {
         kind: "process",
         pid,
-        startToken: processPlatform.inspect(pid)?.startToken ?? null,
+        startToken: spawned.state === "found" ? spawned.identity.startToken : null,
       } as const;
     }),
 
@@ -58,8 +59,14 @@ export const makeProcessLauncher = (
     Effect.sync(() => {
       if (reference.kind !== "process") return false;
       if (!processPlatform.alive(reference.pid)) return false;
-      const identity = processPlatform.inspect(reference.pid);
-      if (!identity) return false;
+      const lookup = processPlatform.inspect(reference.pid);
+      if (lookup.state === "absent") return false;
+      // alive() answered through kill(pid, 0), which needs no subprocess, so the pid is
+      // known to exist here. A lookup that could not be answered — a timed-out
+      // Win32_Process query under load, a host without ps — is not evidence the process
+      // is gone, and disowning a live instance strands it holding its VRAM.
+      if (lookup.state === "unavailable") return true;
+      const identity = lookup.identity;
       // Start token is decisive where the OS provides one.
       if (reference.startToken !== null) return identity.startToken === reference.startToken;
       // Elsewhere the pid's command line must still carry our unmistakable argument:

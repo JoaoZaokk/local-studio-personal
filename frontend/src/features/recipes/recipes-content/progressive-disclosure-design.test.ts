@@ -10,12 +10,11 @@ const resourceDrawer = source("../../../ui/resource-drawer.tsx");
 const skills = source("../../integrations/skills-section.tsx");
 
 describe("model progressive disclosure", () => {
-  test("renders picks as branded cards that open the shared drawer", () => {
-    assert.match(picks, /lg:grid-cols-2/);
+  test("renders picks in the shared catalog table that opens the shared drawer", () => {
+    assert.match(picks, /<ModelCatalogTable/);
     assert.match(picks, /function PickDrawer/);
     assert.match(picks, /<ResourceDrawer/);
     assert.match(picks, /<ModelLogo/);
-    assert.match(picks, /backgroundColor: `\$\{brand\.color\}0D`/);
     assert.doesNotMatch(picks, /<details/);
   });
 
