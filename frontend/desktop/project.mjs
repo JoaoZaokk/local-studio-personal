@@ -429,7 +429,7 @@ var init_bundle = __esm(() => {
 var exports_check_conventional_commits = {};
 import { execFileSync as execFileSync2 } from "node:child_process";
 import { readFileSync as readFileSync6 } from "node:fs";
-var allowedTypes, ignoredSubjects, args, messageFileIndex, rangeIndex, excludedRefIndex, fail = (message) => {
+var allowedTypes, ignoredSubjects, args, messageFileIndex, rangeIndex, excludedRefIndex, excludePublished, fail = (message) => {
   console.error(message), process.exitCode = 1;
 }, validateSubject = (subject, label) => {
   if (!subject.trim()) {
@@ -473,7 +473,7 @@ var init_check_conventional_commits = __esm(() => {
     /^Revert /,
     /^Initial commit$/,
     /^dependabot\//
-  ], args = process.argv.slice(2), messageFileIndex = args.indexOf("--message-file"), rangeIndex = args.indexOf("--range"), excludedRefIndex = args.indexOf("--exclude");
+  ], args = process.argv.slice(2), messageFileIndex = args.indexOf("--message-file"), rangeIndex = args.indexOf("--range"), excludedRefIndex = args.indexOf("--exclude"), excludePublished = args.includes("--exclude-published");
   if (messageFileIndex !== -1) {
     let messageFile = args[messageFileIndex + 1], subject = readFileSync6(messageFile, "utf8").split(/\r?\n/, 1)[0] ?? "";
     validateSubject(subject, "commit message");
@@ -482,7 +482,7 @@ var init_check_conventional_commits = __esm(() => {
     if (!range)
       fail("Usage: check-conventional-commits.mjs --message-file <path> | --range <base..head>");
     else {
-      let excludedRef = excludedRefIndex === -1 ? void 0 : args[excludedRefIndex + 1], logArgs = excludedRef ? ["log", "--format=%s", range, "--not", excludedRef] : ["log", "--format=%s", range], output2 = execFileSync2("git", logArgs, { encoding: "utf8" }).trim();
+      let excludedRef = excludedRefIndex === -1 ? void 0 : args[excludedRefIndex + 1], logArgs = excludePublished ? ["log", "--format=%s", range, "--not", "--remotes"] : excludedRef ? ["log", "--format=%s", range, "--not", excludedRef] : ["log", "--format=%s", range], output2 = execFileSync2("git", logArgs, { encoding: "utf8" }).trim();
       (output2 ? output2.split(/\r?\n/) : []).forEach((subject, index) => validateSubject(subject, `commit ${index + 1}`));
     }
   }
@@ -2423,19 +2423,11 @@ function prePush() {
       throw Error(`pre-push: direct pushes to ${remoteRef} are blocked; merge through GitHub`);
     if (/^0{40}$/.test(localSha))
       continue;
-    let defaultRef, excludedRef, range2;
+    let defaultRef, range2;
     try {
       defaultRef = git(["symbolic-ref", "--quiet", "--short", `refs/remotes/${remote}/HEAD`]);
     } catch {
       defaultRef = `${remote}/main`;
-    }
-    excludedRef = defaultRef;
-    try {
-      let devRef = `${remote}/dev`;
-      git(["rev-parse", "--verify", "--quiet", devRef]);
-      git(["merge-base", "--is-ancestor", devRef, localSha]);
-      excludedRef = devRef;
-    } catch {
     }
     if (/^0{40}$/.test(remoteSha)) {
       try {
@@ -2445,11 +2437,7 @@ function prePush() {
       }
     } else
       range2 = `${remoteSha}..${localSha}`;
-    let checkArgs = [path11.join(root5, "scripts/project.mjs"), "check-commits", "--range", range2];
-    try {
-      git(["rev-parse", "--verify", "--quiet", excludedRef]), checkArgs.push("--exclude", excludedRef);
-    } catch {
-    }
+    let checkArgs = [path11.join(root5, "scripts/project.mjs"), "check-commits", "--range", range2, "--exclude-published"];
     console.log(`Checking conventional commits for ${localRef} -> ${remote}/${remoteRef} (${url})`), run3(process.execPath, checkArgs);
   }
   run3("npm", ["run", "check:static"], path11.join(root5, "frontend")), run3("npm", ["run", "check:cleanup"], path11.join(root5, "frontend")), run3(process.execPath, [path11.join(root5, "scripts/project.mjs"), "assert-standalone"]);
