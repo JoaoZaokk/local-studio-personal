@@ -49,9 +49,14 @@ function summaryStartTime(session: Pick<SessionSummary, "startedAt" | "updatedAt
   return Number.isFinite(value) ? value : 0;
 }
 
+export function encodeCwdForPlatform(cwd: string, platform: NodeJS.Platform): string {
+  const normalized = path.resolve(cwd).replace(/\\+/g, "/");
+  const collapsed = normalized.replace(/^\//, "").replace(/\/+/g, "-");
+  return `--${platform === "win32" ? collapsed.replace(/:/g, "-") : collapsed}--`;
+}
+
 export function encodeCwdForPi(cwd: string): string {
-  const normalized = path.resolve(cwd);
-  return `--${normalized.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+  return encodeCwdForPlatform(cwd, process.platform);
 }
 
 export function configuredPiSessionDir(cwd: string): string | undefined {

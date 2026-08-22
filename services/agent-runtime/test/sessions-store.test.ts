@@ -3,7 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { encodeCwdForPi, findSessionFile, listSessions, loadSession } from "../src/sessions-store";
+import {
+  encodeCwdForPi,
+  encodeCwdForPlatform,
+  findSessionFile,
+  listSessions,
+  loadSession,
+} from "../src/sessions-store";
 
 const originalPiCodingAgentDir = process.env.PI_CODING_AGENT_DIR;
 const temporaryRoots: string[] = [];
@@ -51,7 +57,13 @@ function writeSession(
 
 describe("findSessionFile", () => {
   test("uses Pi's drive-safe session directory encoding", () => {
-    expect(encodeCwdForPi(String.raw`C:\Users\example\workspace`)).not.toContain(":");
+    expect(encodeCwdForPlatform(String.raw`C:\Users\example\workspace`, "win32")).not.toContain(
+      ":",
+    );
+  });
+
+  test("keeps the colons a POSIX directory name is allowed to carry", () => {
+    expect(encodeCwdForPlatform("/home/example/a:b/workspace", "darwin")).toContain("a:b");
   });
 
   test("resolves an exact Pi session identity from a canonical filename", () => {
