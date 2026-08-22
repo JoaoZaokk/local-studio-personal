@@ -11,9 +11,14 @@ type CommandResult = { status: number | null; stdout: string };
 type CommandRunner = (command: string, args: string[]) => CommandResult;
 type KillProcess = (pid: number, signal?: NodeJS.Signals | 0) => void;
 
+export type ProcessLookup =
+  | { state: "found"; identity: ProcessIdentity }
+  | { state: "absent" }
+  | { state: "unavailable" };
+
 export type ProcessPlatform = {
   alive(pid: number): boolean;
-  inspect(pid: number): ProcessIdentity | null;
+  inspect(pid: number): ProcessLookup;
   list(): ProcessIdentity[];
   terminateTree(pid: number, force: boolean): void;
 };
@@ -112,24 +117,34 @@ export const makeProcessPlatform = (options: ProcessPlatformOptions = {}): Proce
     }
   };
 
-  const inspect = (pid: number): ProcessIdentity | null => {
-    if (!Number.isInteger(pid) || pid <= 0) return null;
+  const linuxStartToken = (pid: number): string | null => {
+    if (platform !== "linux") return null;
+    try {
+      const stat = readFile(`/proc/${pid}/stat`);
+      return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const inspect = (pid: number): ProcessLookup => {
+    if (!Number.isInteger(pid) || pid <= 0) return { state: "absent" };
     if (platform === "win32") {
       const script = `Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}' | Select-Object ProcessId,CommandLine,CreationDate | ConvertTo-Json -Compress`;
-      return parseWindowsProcessList(windowsPowerShell(run, script).stdout)[0] ?? null;
+      const result = windowsPowerShell(run, script);
+      if (result.status === null) return { state: "unavailable" };
+      const identity = parseWindowsProcessList(result.stdout)[0];
+      return identity ? { state: "found", identity } : { state: "absent" };
     }
+    const startToken = linuxStartToken(pid);
     const command = run("ps", ["-o", "command=", "-p", String(pid)]);
-    if (command.status !== 0 || !command.stdout) return null;
-    let startToken: string | null = null;
-    if (platform === "linux") {
-      try {
-        const stat = readFile(`/proc/${pid}/stat`);
-        startToken = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? null;
-      } catch {
-        startToken = null;
-      }
+    if (command.status === 0 && command.stdout) {
+      return { state: "found", identity: { pid, commandLine: command.stdout, startToken } };
     }
-    return { pid, commandLine: command.stdout, startToken };
+    if (startToken !== null) {
+      return { state: "found", identity: { pid, commandLine: "", startToken } };
+    }
+    return command.status === null ? { state: "unavailable" } : { state: "absent" };
   };
 
   const list = (): ProcessIdentity[] => {

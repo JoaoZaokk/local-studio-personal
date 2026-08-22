@@ -16,6 +16,61 @@ describe("process command budget", () => {
   });
 });
 
+describe("a probe that could not answer is not a missing process", () => {
+  test("a timed-out CIM query reports unavailable, never absent", () => {
+    const platform = makeProcessPlatform({
+      platform: "win32",
+      kill: () => {},
+      run: () => ({ status: null, stdout: "" }),
+    });
+    expect(platform.inspect(42)).toEqual({ state: "unavailable" });
+  });
+
+  test("a CIM query that answers for no process still reports absent", () => {
+    const platform = makeProcessPlatform({
+      platform: "win32",
+      kill: () => {},
+      run: () => ({ status: 0, stdout: "" }),
+    });
+    expect(platform.inspect(42)).toEqual({ state: "absent" });
+  });
+
+  test("Linux keeps the start token when the host has no working ps", () => {
+    const platform = makeProcessPlatform({
+      platform: "linux",
+      kill: () => {},
+      run: () => ({ status: null, stdout: "" }),
+      readFile: () =>
+        `42 (llama-server) S ${Array.from({ length: 18 }, (_, index) => index).join(" ")} 99887766 rest`,
+    });
+    expect(platform.inspect(42)).toEqual({
+      state: "found",
+      identity: { pid: 42, commandLine: "", startToken: "99887766" },
+    });
+  });
+
+  test("Linux without ps and without proc reports unavailable", () => {
+    const platform = makeProcessPlatform({
+      platform: "linux",
+      kill: () => {},
+      run: () => ({ status: null, stdout: "" }),
+      readFile: () => {
+        throw new Error("ENOENT");
+      },
+    });
+    expect(platform.inspect(42)).toEqual({ state: "unavailable" });
+  });
+
+  test("a ps that ran and found nothing still reports absent", () => {
+    const platform = makeProcessPlatform({
+      platform: "darwin",
+      kill: () => {},
+      run: () => ({ status: 1, stdout: "" }),
+    });
+    expect(platform.inspect(42)).toEqual({ state: "absent" });
+  });
+});
+
 describe("Windows process platform", () => {
   test("parses CIM process identities without inventing missing values", () => {
     expect(
@@ -61,9 +116,12 @@ describe("Windows process platform", () => {
     });
 
     expect(platform.inspect(42)).toEqual({
-      pid: 42,
-      commandLine: "llama-server.exe --port 8000",
-      startToken: "token",
+      state: "found",
+      identity: {
+        pid: 42,
+        commandLine: "llama-server.exe --port 8000",
+        startToken: "token",
+      },
     });
     platform.terminateTree(42, false);
     platform.terminateTree(42, true);

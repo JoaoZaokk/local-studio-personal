@@ -157,8 +157,10 @@ export const probeBackendRuntime = (
 export const probeRunningProcessPython = (pid: number): Effect.Effect<string | null> =>
   process.platform === "win32"
     ? Effect.sync(() => {
-        const identity = realProcessPlatform.inspect(pid);
-        return identity ? parseCommandPython(splitProcessCommandLine(identity.commandLine)) : null;
+        const lookup = realProcessPlatform.inspect(pid);
+        return lookup.state === "found"
+          ? parseCommandPython(splitProcessCommandLine(lookup.identity.commandLine))
+          : null;
       })
     : runCommandAsyncEffect("ps", ["-p", String(pid), "-o", "args="], {
         timeoutMs: RUNNING_PROCESS_PROBE_TIMEOUT_MS,
