@@ -11,8 +11,8 @@ describe("process command budget", () => {
     expect(commandTimeoutMs("linux")).toBe(3_000);
   });
 
-  test("gives Windows a wider budget so a cold PowerShell start is not read as a dead process", () => {
-    expect(commandTimeoutMs("win32")).toBe(10_000);
+  test("keeps the Windows budget a hang breaker, far above a contended CIM query", () => {
+    expect(commandTimeoutMs("win32")).toBe(120_000);
   });
 });
 

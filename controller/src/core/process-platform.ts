@@ -26,7 +26,7 @@ type ProcessPlatformOptions = {
 };
 
 const POSIX_COMMAND_TIMEOUT_MS = 3_000;
-const WINDOWS_COMMAND_TIMEOUT_MS = 10_000;
+const WINDOWS_COMMAND_TIMEOUT_MS = 120_000;
 
 export const commandTimeoutMs = (platform: NodeJS.Platform): number =>
   platform === "win32" ? WINDOWS_COMMAND_TIMEOUT_MS : POSIX_COMMAND_TIMEOUT_MS;
