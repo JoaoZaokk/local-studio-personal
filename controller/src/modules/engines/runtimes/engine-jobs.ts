@@ -44,6 +44,17 @@ type CreateEngineJobOptions = {
   runningProcess?: ProcessInfo | null;
 };
 
+export const isRuntimeJobSupported = (type: EngineJob["type"], target: RuntimeTarget): boolean =>
+  type === "inspect"
+    ? target.kind !== "wsl2"
+    : type === "uninstall"
+      ? target.capabilities.canUninstall
+      : type === "install" && target.kind === "wsl2"
+        ? target.capabilities.canInstall
+        : type === "install" || type === "update"
+          ? target.capabilities.canUpdate
+          : false;
+
 const MAX_OUTPUT_TAIL_LENGTH = 4000;
 const jobs = new Map<string, EngineJob>();
 const jobChildren = new Map<string, ChildProcess>();
@@ -215,17 +226,7 @@ const runJob = (
           }),
         );
       }
-      const supported =
-        options.type === "install"
-          ? target.capabilities.canInstall
-          : options.type === "update"
-            ? target.capabilities.canUpdate
-            : options.type === "uninstall"
-              ? target.capabilities.canUninstall
-              : options.type === "inspect"
-                ? target.capabilities.canInspectOptions
-                : false;
-      if (!supported) {
+      if (!isRuntimeJobSupported(options.type, target)) {
         return yield* Effect.fail(
           new EngineOperationError({
             operation: "validate-runtime-target",
