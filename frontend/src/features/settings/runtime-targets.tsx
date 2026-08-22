@@ -393,12 +393,12 @@ function RuntimeTargetAction({
           {running ? job?.status : canInstall ? "Install" : "Update"}
         </RowAction>
       ) : null}
-      {canUninstall ? (
+      {canUninstall && onUninstall ? (
         <RowAction
           alwaysVisible
           tone="danger"
-          onClick={() => void onUninstall?.(target)}
-          disabled={running || !onUninstall}
+          onClick={() => void onUninstall(target)}
+          disabled={running}
           title={`Remove managed ${target.backend} from ${target.wslDistribution ?? "WSL2"}`}
         >
           Remove
