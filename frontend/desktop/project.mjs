@@ -929,7 +929,7 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
     child = spawn2(executable, [`--remote-debugging-port=${debugPort}`, "--enable-logging=stderr", "--v=1"], {
       cwd: temp,
       detached: !0,
-      env,
+      env: { ...env, LOCAL_STUDIO_PTY_TRACE: "1" },
       stdio: ["ignore", "pipe", "pipe"]
     }), child.stdout.on("data", (chunk) => stdout.push(String(chunk))), child.stderr.on("data", (chunk) => stderr.push(String(chunk)));
     let frontendPort = Number(await waitForFile(frontendPortFile, 60000));
