@@ -1,19 +1,35 @@
 import type { HuggingFaceModelCardPayload } from "@/lib/huggingface";
 import type { StarterPreset } from "@/lib/types";
 
-export type GgufFileOption = { value: string; label: string };
+export type GgufFileOption = { value: string; label: string; allowPatterns?: string[] };
 
 export function ggufFileOptions(payload: HuggingFaceModelCardPayload): GgufFileOption[] {
-  return (payload.siblings ?? [])
+  const files = (payload.siblings ?? [])
     .flatMap((file) => {
       const name = file.rfilename?.trim();
       if (!name || !/\.gguf$/i.test(name)) return [];
       if (/(?:^|[-_.])(mmproj|projector|adapter|draft)(?:[-_.]|$)/i.test(name)) return [];
-      const size =
-        typeof file.size === "number" && file.size > 0 ? formatFileSize(file.size) : null;
-      return [{ value: name, label: size ? `${name} · ${size}` : name }];
+      return [{ name, size: typeof file.size === "number" && file.size > 0 ? file.size : 0 }];
     })
-    .sort((first, second) => first.value.localeCompare(second.value));
+    .sort((first, second) => first.name.localeCompare(second.name));
+  const groups = new Map<string, typeof files>();
+  for (const file of files) {
+    const family = file.name.replace(/-\d{5}-of-\d{5}\.gguf$/i, ".gguf");
+    groups.set(family, [...(groups.get(family) ?? []), file]);
+  }
+  return [...groups.entries()].map(([family, members]) => {
+    const first = members[0];
+    const size = members.reduce((total, file) => total + file.size, 0);
+    const split = members.length > 1 || first.name !== family;
+    const shardLabel = split ? ` · ${members.length} shards` : "";
+    return {
+      value: first.name,
+      label: `${family}${shardLabel}${size > 0 ? ` · ${formatFileSize(size)}` : ""}`,
+      ...(split
+        ? { allowPatterns: [first.name.replace(/-\d{5}-of-\d{5}\.gguf$/i, "-*.gguf")] }
+        : {}),
+    };
+  });
 }
 
 export function manualDownloadPreset(
@@ -31,7 +47,7 @@ export function manualDownloadPreset(
     size_gb: null,
     min_vram_gb: null,
     model_id: modelId,
-    allow_patterns: [file.value],
+    allow_patterns: file.allowPatterns ?? [file.value],
     backend: "llamacpp",
     gguf_file: file.value,
   };
