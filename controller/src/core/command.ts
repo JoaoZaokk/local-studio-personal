@@ -241,7 +241,7 @@ const binarySearchPath = (): string => {
   );
 };
 
-const isExplicitPath = (binaryName: string): boolean =>
+export const isExplicitPath = (binaryName: string): boolean =>
   binaryName.includes("/") || binaryName.includes("\\");
 
 export const resolveBinary = (binaryName: string): string | null => {

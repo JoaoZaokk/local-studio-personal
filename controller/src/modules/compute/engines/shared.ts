@@ -134,11 +134,17 @@ export const modelMounts = (request: LaunchRequest): LaunchPlan["mounts"] =>
     ? [{ from: request.modelPath, to: CONTAINER_MODEL_DIR, readOnly: true }]
     : [];
 
+const SERVE_HOST: Record<EngineRuntimeKind, string> = {
+  process: "127.0.0.1",
+  wsl2: "127.0.0.1",
+  docker: "0.0.0.0",
+};
+
 /** Containers listen on all interfaces so the published port reaches them; processes bind
  *  loopback, because the controller proxies them and nothing else should connect. */
 export const serveAddress = (request: LaunchRequest, listenPort: number): string[] => [
   "--host",
-  request.runtime === "process" ? "127.0.0.1" : "0.0.0.0",
+  SERVE_HOST[request.runtime],
   "--port",
   String(listenPort),
 ];

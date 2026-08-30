@@ -78,7 +78,7 @@ describe("isManagedServeRuntimeTarget", () => {
       ]).ref,
       "Ubuntu",
     );
-    assert.deepEqual(managedRuntimeBackendsFor("win32", [wslTarget]), []);
+    assert.deepEqual(managedRuntimeBackendsFor("linux", [wslTarget]), []);
 
     const available = runtimeOptionsFor("vllm", [
       {

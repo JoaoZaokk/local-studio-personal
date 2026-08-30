@@ -61,12 +61,19 @@ export const listWslDistributions = (): Effect.Effect<readonly WslDistribution[]
         ),
       );
 
-export const listRunningWslDistributions = (): Effect.Effect<readonly string[]> =>
+export type RunningDistributions =
+  | { readonly state: "listed"; readonly names: readonly string[] }
+  | { readonly state: "unavailable" };
+
+export const readRunningDistributions = (result: AsyncCommandResult): RunningDistributions =>
+  result.status === 0 && !result.timedOut
+    ? { state: "listed", names: parseWslQuietList(result.stdout) }
+    : { state: "unavailable" };
+
+export const runningWslDistributions = (): Effect.Effect<RunningDistributions> =>
   process.platform !== "win32"
-    ? Effect.succeed([])
-    : wsl(["--list", "--running", "--quiet"]).pipe(
-        Effect.map((result) => (result.status === 0 ? parseWslQuietList(result.stdout) : [])),
-      );
+    ? Effect.succeed({ state: "listed", names: [] })
+    : wsl(["--list", "--running", "--quiet"]).pipe(Effect.map(readRunningDistributions));
 
 export const runInWsl = (
   distribution: string,

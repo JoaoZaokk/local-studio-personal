@@ -4,7 +4,7 @@ import { detectBackend, listProcesses } from "./process-scan";
 
 const platform = (commandLine: string): ProcessPlatform => ({
   alive: () => true,
-  inspect: () => null,
+  inspect: () => ({ state: "absent" }),
   list: () => [{ pid: 41, commandLine, startToken: null }],
   terminateTree: (): void => {},
 });

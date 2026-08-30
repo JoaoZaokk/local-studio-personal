@@ -88,7 +88,16 @@ export const registerLogsRoutes = defineRoutes((app, context) => {
     const now = Date.now();
     if (now - lastCleanupAt < 60_000) return;
     lastCleanupAt = now;
-    cleanupLogFiles(context.config.data_dir, getLogCleanupDefaultsFromEnvironment());
+    const liveInstanceLogs = new Set(
+      context.compute.store
+        .all()
+        .filter((record) => typeof record.recipeId === "string")
+        .map((record) => context.compute.store.logPath(record.recipeId)),
+    );
+    cleanupLogFiles(context.config.data_dir, {
+      ...getLogCleanupDefaultsFromEnvironment(),
+      excludePaths: liveInstanceLogs,
+    });
   };
 
   const decodeSessionId = (

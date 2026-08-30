@@ -216,6 +216,24 @@ describe("docker vs process", () => {
   });
 });
 
+describe("the address an engine binds", () => {
+  const bindHost = (runtime: EngineRuntimeKind): string | undefined => {
+    const argv = planLaunch(
+      request({ runtime, wslDistribution: runtime === "wsl2" ? "Ubuntu" : null }),
+    ).argv;
+    return argv[argv.indexOf("--host") + 1];
+  };
+
+  test("a WSL2 engine binds loopback, not every interface", () => {
+    expect(bindHost("wsl2")).toBe("127.0.0.1");
+  });
+
+  test("a container is the only runtime that binds every interface", () => {
+    const runtimes: readonly EngineRuntimeKind[] = ["process", "wsl2", "docker"];
+    expect(runtimes.filter((runtime) => bindHost(runtime) === "0.0.0.0")).toEqual(["docker"]);
+  });
+});
+
 describe("device translation", () => {
   const devices = ["GPU-aaa", "GPU-bbb"];
 

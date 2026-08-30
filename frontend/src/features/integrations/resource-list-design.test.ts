@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-const machines = source("../configure/rig-node-card.tsx");
+const machines = source("../configure/rig-node-row.tsx");
 const machineEditor = source("../configure/node-form-modal.tsx");
 const plugins = source("./plugins-section.tsx");
 const connectors = source("../settings/connectors-section.tsx");
@@ -15,7 +15,7 @@ const serves = source("../recipes/recipes-content/recipe-row.tsx");
 describe("configure resource list design", () => {
   test("uses the Serve row language across every resource family", () => {
     for (const file of [machines, plugins, connectors, providers, skills, serves]) {
-      assert.match(file, /<ModelRow/);
+      assert.match(file, /<DataRow/);
       assert.match(file, /onClick=/);
     }
   });
@@ -40,10 +40,10 @@ describe("configure resource list design", () => {
   });
 
   test("keeps row actions separate from whole-row editor clicks", () => {
-    assert.match(machines, /actions=/);
+    assert.match(machines, /<DataRow onOpen=\{onEdit\}/);
     assert.match(plugins, /PluginRowActions/);
-    assert.match(connectors, /<ModelButton/);
-    assert.match(providers, /<ModelButton/);
-    assert.match(serves, /onClick=\{handleEdit\}/);
+    assert.match(connectors, /<RowAction/);
+    assert.match(providers, /<RowAction/);
+    assert.match(serves, /<DataRow onOpen=\{handleEdit\}/);
   });
 });

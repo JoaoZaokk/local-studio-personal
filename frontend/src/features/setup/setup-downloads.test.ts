@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { ModelDownload, StarterPreset } from "@/lib/types";
-import { countAdditionalQueuedDownloads, selectSetupDownload } from "./setup-downloads";
+import { selectSetupDownload } from "./setup-downloads";
 
 const download = (id: string, status: ModelDownload["status"], file: string): ModelDownload => ({
   id,
@@ -37,16 +37,5 @@ describe("setup download selection", () => {
       download("complete", "completed", "model-Q1.gguf"),
     ];
     assert.equal(selectSetupDownload(downloads, "org/model", preset)?.id, "complete");
-  });
-
-  test("counts only work that is active or resumable", () => {
-    const downloads = [
-      download("active", "downloading", "model-Q1.gguf"),
-      download("queued", "queued", "model-Q1.gguf"),
-      download("paused", "paused", "model-Q1.gguf"),
-      download("done", "completed", "model-Q1.gguf"),
-      download("old", "canceled", "model-Q1.gguf"),
-    ];
-    assert.equal(countAdditionalQueuedDownloads(downloads, "active"), 2);
   });
 });

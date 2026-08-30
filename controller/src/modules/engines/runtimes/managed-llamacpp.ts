@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { arch, cpus } from "node:os";
 import { posix, resolve, win32 } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import type { Config } from "../../../config/env";
 import { resolveBinary, runCommandAsyncEffect } from "../../../core/command";
@@ -13,8 +13,9 @@ const LLAMACPP_REPO = "https://github.com/ggml-org/llama.cpp";
 const MANAGED_BUILD_TIMEOUT_MS = 45 * 60_000;
 const GITHUB_API = "https://api.github.com/repos/ggml-org/llama.cpp/releases";
 const WINDOWS_CUDA_VERSION = "12.4";
+const RELEASE_SCAN_LIMIT = 30;
 
-type GithubAsset = { name: string; browser_download_url: string };
+type GithubAsset = { name: string; browser_download_url: string; digest?: string | null };
 type GithubRelease = { tag_name: string; assets: GithubAsset[] };
 
 export const managedLlamacppRoot = (config: Pick<Config, "data_dir">): string =>
@@ -30,6 +31,33 @@ export const managedLlamaServerPathForPlatform = (
 
 export const managedLlamaServerPath = (config: Pick<Config, "data_dir">): string =>
   managedLlamaServerPathForPlatform(config, process.platform);
+
+export interface WindowsLlamacppRelease {
+  readonly release: GithubRelease;
+  readonly assets: GithubAsset[];
+}
+
+export const selectWindowsLlamacppRelease = (
+  releases: readonly GithubRelease[],
+  cuda: boolean,
+): WindowsLlamacppRelease | null =>
+  releases
+    .map((release) => ({ release, assets: selectWindowsLlamacppAssets(release, cuda) }))
+    .find((entry): entry is WindowsLlamacppRelease => entry.assets !== null) ?? null;
+
+export const publishedDigest = (asset: GithubAsset): string | null => {
+  const match = /^sha256:([0-9a-f]{64})$/.exec(asset.digest?.trim().toLowerCase() ?? "");
+  return match?.[1] ?? null;
+};
+
+const sha256OfFile = (target: string): Effect.Effect<string | null> =>
+  Effect.callback<string | null>((resume) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(target);
+    stream.on("error", () => resume(Effect.succeed(null)));
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resume(Effect.succeed(hash.digest("hex"))));
+  });
 
 export const selectWindowsLlamacppAssets = (
   release: GithubRelease,
@@ -87,30 +115,37 @@ const installManagedLlamacppWindows = (
         used_command: null,
       };
     }
-    const releaseUrl = requestedTag ? `${GITHUB_API}/tags/${requestedTag}` : `${GITHUB_API}/latest`;
-    const release = yield* Effect.tryPromise(async () => {
-      const response = await fetch(releaseUrl, {
+    const cuda = Boolean(resolveNvidiaSmiBinary());
+    const flavour = cuda ? `CUDA ${WINDOWS_CUDA_VERSION}` : "CPU";
+    const candidates = yield* Effect.tryPromise(async () => {
+      const url = requestedTag
+        ? `${GITHUB_API}/tags/${requestedTag}`
+        : `${GITHUB_API}?per_page=${RELEASE_SCAN_LIMIT}`;
+      const response = await fetch(url, {
         headers: { Accept: "application/vnd.github+json", "User-Agent": "Local-Studio" },
         signal: AbortSignal.timeout(30_000),
       });
       if (!response.ok) throw new Error(`GitHub release lookup failed (${response.status})`);
-      const value = (await response.json()) as GithubRelease;
-      if (!value.tag_name || !Array.isArray(value.assets))
+      const value = (await response.json()) as GithubRelease | GithubRelease[];
+      const releases = Array.isArray(value) ? value : [value];
+      if (releases.some((entry) => !entry.tag_name || !Array.isArray(entry.assets)))
         throw new Error("Invalid GitHub release");
-      return value;
+      return releases;
     });
 
-    const cuda = Boolean(resolveNvidiaSmiBinary());
-    const assets = selectWindowsLlamacppAssets(release, cuda);
-    if (!assets) {
+    const match = selectWindowsLlamacppRelease(candidates, cuda);
+    if (!match) {
       return {
         success: false,
         version: null,
         output: null,
-        error: `Release ${release.tag_name} does not provide the expected Windows ${cuda ? `CUDA ${WINDOWS_CUDA_VERSION}` : "CPU"} x64 artifacts.`,
+        error: requestedTag
+          ? `Release ${requestedTag} does not provide the expected Windows ${flavour} x64 artifacts.`
+          : `No llama.cpp release among the newest ${RELEASE_SCAN_LIMIT} provides the expected Windows ${flavour} x64 artifacts.`,
         used_command: "GitHub release lookup",
       };
     }
+    const { release, assets } = match;
 
     const root = managedLlamacppRoot(options.config);
     const staging = resolve(root, `.install-${randomUUID()}`);
@@ -143,6 +178,28 @@ const installManagedLlamacppWindows = (
           version: null,
           output: download.stdout || null,
           error: download.stderr || `Failed to download ${asset.name}`,
+          used_command: "curl",
+        };
+      }
+      const expected = publishedDigest(asset);
+      if (!expected) {
+        rmSync(staging, { recursive: true, force: true });
+        return {
+          success: false,
+          version: null,
+          output: null,
+          error: `GitHub published no SHA-256 digest for ${asset.name}; refusing to install an unverified binary.`,
+          used_command: "GitHub release lookup",
+        };
+      }
+      const actual = yield* sha256OfFile(archive);
+      if (actual !== expected) {
+        rmSync(staging, { recursive: true, force: true });
+        return {
+          success: false,
+          version: null,
+          output: null,
+          error: `SHA-256 mismatch for ${asset.name}: GitHub published ${expected}, the download hashed to ${actual ?? "nothing readable"}.`,
           used_command: "curl",
         };
       }
