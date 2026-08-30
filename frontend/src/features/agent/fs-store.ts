@@ -47,6 +47,18 @@ const SYSTEM_ROOTS = new Set([
   "/var",
 ]);
 
+// The list above names POSIX directories only, so on Windows nothing but the
+// drive root was ever refused and cwd="C:\Windows" walked straight through.
+// Windows names these through the environment rather than at fixed paths, and
+// compares paths case-insensitively, so both are taken from there. Like the
+// POSIX list this refuses the directories themselves, not their contents.
+const WINDOWS_SYSTEM_ROOTS = new Set(
+  ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"]
+    .map((name) => process.env[name])
+    .filter((entry): entry is string => Boolean(entry && entry.trim()))
+    .map((entry) => path.resolve(entry).toLowerCase()),
+);
+
 // macOS symlinks several of those into /private (/etc → /private/etc, /var →
 // /private/var), so matching the literal names alone lets `cwd=/etc` through
 // once it is symlink-resolved. Resolve the list once and match against both.
@@ -72,10 +84,15 @@ export function assertWorkspaceRoot(rootCwd: string): string {
       return resolved;
     }
   })();
+  const windowsSystem =
+    process.platform === "win32" &&
+    (WINDOWS_SYSTEM_ROOTS.has(resolved.toLowerCase()) ||
+      WINDOWS_SYSTEM_ROOTS.has(real.toLowerCase()));
   if (
     SYSTEM_ROOTS.has(resolved) ||
     SYSTEM_ROOTS.has(real) ||
     RESOLVED_SYSTEM_ROOTS.has(real) ||
+    windowsSystem ||
     real === path.parse(real).root
   ) {
     throw new Error("Path is not an allowed workspace root");

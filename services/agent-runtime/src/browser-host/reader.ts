@@ -61,14 +61,20 @@ async function resolveReaderHost(hostname: string): Promise<ResolvedHostAddress[
   }));
 }
 
+// Decoded in one pass: replacing &amp; first would turn "&amp;lt;" into "&lt;" and
+// then into "<", so a page that escaped its own markup would come back decoded
+// one level too far.
+const HTML_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&nbsp;": " ",
+};
+
 function decodeEntities(value: string): string {
-  return value
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ");
+  return value.replace(/&(?:amp|lt|gt|quot|#39|nbsp);/g, (entity) => HTML_ENTITIES[entity] ?? entity);
 }
 
 // Lightweight HTML → readable text. We intentionally avoid pulling in
