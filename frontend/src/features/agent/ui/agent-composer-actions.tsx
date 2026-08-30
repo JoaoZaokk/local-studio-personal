@@ -48,7 +48,7 @@ export function AgentComposerActions({
     <div className="agent-composer-actions-row flex min-h-9 items-center gap-0.5 bg-transparent px-2 pb-2 pt-0 text-xs">
       <input
         ref={fileInputRef}
-        type="file"
+        type="text"
         multiple
         className="hidden"
         onChange={(event) => onAttachFiles(event.currentTarget.files)}
