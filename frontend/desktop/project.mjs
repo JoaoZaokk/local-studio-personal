@@ -829,23 +829,18 @@ async function waitForPage(browser, origin, timeoutMs) {
 }
 async function smokeTerminal(page, cwd) {
   return page.evaluate(async ({ cwd: terminalCwd, command }) => {
-    let mark = (step) => console.log(`PTY-SMOKE-STEP ${step}`);
-    mark("bridge");
     let bridge = globalThis.localStudioDesktop;
     if (!bridge)
       throw Error("Desktop bridge is unavailable");
-    mark("status");
     let status = await bridge.terminal.status();
     if (!status.available)
       throw Error(status.reason || "PTY is unavailable");
-    mark("open");
     let session = await bridge.terminal.open({
       cwd: terminalCwd,
       cols: 80,
       rows: 24,
       ownerKey: "desktop-package-smoke"
     });
-    mark(`opened replay=${(session.replay || "").length}`);
     return new Promise((resolve3, reject) => {
       let output2 = session.replay || "", timer = setTimeout(() => {
         disposeData(), disposeExit(), reject(Error(`PTY smoke timed out: ${output2}`));
@@ -853,17 +848,16 @@ async function smokeTerminal(page, cwd) {
         if (!output2.includes("LOCAL_STUDIO_PTY_OK"))
           return;
         clearTimeout(timer), disposeData(), disposeExit(), resolve3({ available: !0, output: "LOCAL_STUDIO_PTY_OK" });
-      }, seen = 0, disposeData = bridge.terminal.onData((id, chunk) => {
+      }, disposeData = bridge.terminal.onData((id, chunk) => {
         if (id !== session.id)
           return;
-        if (seen < 3) mark(`data ${++seen} len=${String(chunk).length}`);
         output2 += chunk, finish();
       }), disposeExit = bridge.terminal.onExit((id) => {
         if (id !== session.id)
           return;
         finish();
       });
-      mark("write"), bridge.terminal.write(session.id, command), finish();
+      bridge.terminal.write(session.id, command), finish();
     });
   }, { cwd, command: process2.platform === "win32" ? "Write-Output 'LOCAL_STUDIO_PTY_OK'; exit\r\n" : "printf 'LOCAL_STUDIO_PTY_OK\\n'; exit\n" });
 }
@@ -929,7 +923,7 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
     child = spawn2(executable, [`--remote-debugging-port=${debugPort}`, "--enable-logging=stderr", "--v=1"], {
       cwd: temp,
       detached: !0,
-      env: { ...env, LOCAL_STUDIO_PTY_TRACE: "1" },
+      env,
       stdio: ["ignore", "pipe", "pipe"]
     }), child.stdout.on("data", (chunk) => stdout.push(String(chunk))), child.stderr.on("data", (chunk) => stderr.push(String(chunk)));
     let frontendPort = Number(await waitForFile(frontendPortFile, 60000));
@@ -942,15 +936,10 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
     let page = await waitForPage(browser, origin, 30000);
     page.on("crash", () => crashed.push(page.url() || origin));
     await page.waitForLoadState("domcontentloaded");
-    await page.goto(`${origin}/`, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.evaluate(() => console.log("PTY-SMOKE-STEP root-loaded"));
-    await page.waitForTimeout(15000);
-    await page.evaluate(() => console.log("PTY-SMOKE-STEP root-survived"));
     let agentResponse = await page.goto(`${origin}/agent`, {
       waitUntil: "domcontentloaded",
       timeout: 30000
     });
-    await page.evaluate(() => console.log("PTY-SMOKE-STEP agent-loaded"));
     if (!agentResponse?.ok())
       throw Error(`Agent route returned ${agentResponse?.status() ?? "no response"}`);
     let runtime = await page.evaluate(async () => {
@@ -960,9 +949,6 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
     });
     if (expectedVersion && runtime.appVersion !== expectedVersion)
       throw Error(`Packaged app version ${runtime.appVersion} does not match ${expectedVersion}`);
-    await page.evaluate(() => console.log("PTY-SMOKE-STEP idle-start"));
-    await page.waitForTimeout(2e4);
-    await page.evaluate(() => console.log("PTY-SMOKE-STEP idle-end"));
     let terminal = await smokeTerminal(page, temp), result = {
       appPath,
       agentStatus: agentResponse.status(),

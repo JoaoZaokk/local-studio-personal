@@ -105,30 +105,6 @@ function clampPtyDimension(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) && parsed >= 2 ? parsed : fallback;
 }
 
-// A UTF-8 sequence split across two reads can leave an unpaired surrogate, and an
-// unpaired surrogate is what a structured-clone IPC send cannot represent. Counting
-// them says whether the chunk that precedes a renderer death is well-formed.
-function countLoneSurrogates(chunk: string): number {
-  let lone = 0;
-  for (let index = 0; index < chunk.length; index += 1) {
-    const unit = chunk.charCodeAt(index);
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = chunk.charCodeAt(index + 1);
-      if (next >= 0xdc00 && next <= 0xdfff) index += 1;
-      else lone += 1;
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
-      lone += 1;
-    }
-  }
-  return lone;
-}
-
-function previewCodeUnits(chunk: string): string {
-  return Array.from(chunk.slice(0, 24))
-    .map((character) => character.charCodeAt(0).toString(16).padStart(4, "0"))
-    .join(" ");
-}
-
 function appendReplay(session: Session, chunk: string): void {
   session.replay += chunk;
   if (session.replay.length > MAX_REPLAY_CHARS) {
@@ -204,16 +180,9 @@ export function openPty(
     replay: "",
     disposers: [],
   };
-  let logged = 0;
   const onData = pty.onData((chunk) => {
     const current = sessions.get(id);
     if (!current) return;
-    if (process.env.LOCAL_STUDIO_PTY_TRACE === "1" && logged < 8) {
-      logged += 1;
-      log.info(
-        `pty-manager: chunk ${logged} id=${id} len=${chunk.length} lone=${countLoneSurrogates(chunk)} head=${previewCodeUnits(chunk)}`,
-      );
-    }
     appendReplay(current, chunk);
     if (!current.webContents || current.webContents.isDestroyed()) return;
     current.webContents.send("desktop:pty-data", { id, chunk });
