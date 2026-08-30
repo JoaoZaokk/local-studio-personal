@@ -42,17 +42,17 @@ export function createMainWindow(appUrl: string): BrowserWindow {
 
   let lastRendererReloadAt = 0;
   window.webContents.on("render-process-gone", (_event, details) => {
+    log.error(
+      [
+        "Renderer process gone",
+        `reason=${details.reason}`,
+        `exitCode=${details.exitCode}`,
+        `url=${window.webContents.getURL() || appUrl}`,
+        `appVersion=${app.getVersion()}`,
+      ].join(" "),
+    );
     void memorySummary().then((memory) => {
-      log.error(
-        [
-          "Renderer process gone",
-          `reason=${details.reason}`,
-          `exitCode=${details.exitCode}`,
-          `url=${window.webContents.getURL() || appUrl}`,
-          `appVersion=${app.getVersion()}`,
-          memory,
-        ].join(" "),
-      );
+      log.error(`Renderer process gone memory ${memory}`);
     });
     // Recover from a renderer crash (OOM/GPU/abnormal) by reloading, so the user
     // isn't left with a permanent blank window. Rate-limited so a hard crash-loop
