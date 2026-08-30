@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { assertWorkspaceRoot } from "@/features/agent/fs-store";
 import { isRecord } from "@/lib/guards";
 
 export type Comment = {
@@ -16,12 +17,18 @@ type CommentsDocument = {
 };
 
 function commentsPath(rootCwd: string): string {
-  return path.join(rootCwd, ".local-studio", "comments.json");
+  // The filesystem and terminal routes put a caller-supplied cwd through this
+  // boundary before touching disk; comments write to one, so they go through it
+  // too. Without it a caller could drop comments.json into a system directory.
+  return path.join(assertWorkspaceRoot(rootCwd), ".local-studio", "comments.json");
 }
 
 async function readDocument(rootCwd: string): Promise<CommentsDocument> {
+  // Resolved outside the catch: a root the boundary refuses is an error to
+  // report, not a document that happens to be missing.
+  const filePath = commentsPath(rootCwd);
   try {
-    const parsed: unknown = JSON.parse(await readFile(commentsPath(rootCwd), "utf-8"));
+    const parsed: unknown = JSON.parse(await readFile(filePath, "utf-8"));
     if (!isRecord(parsed) || !isRecord(parsed.files)) return { files: {} };
     return { files: parsed.files as CommentsDocument["files"] };
   } catch {
