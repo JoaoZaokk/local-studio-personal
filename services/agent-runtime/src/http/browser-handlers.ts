@@ -291,15 +291,21 @@ function parseCurrentPort(request: Request): number | null {
   return Number.isFinite(port) ? port : null;
 }
 
+// Decoded in one pass: replacing &amp; first would turn "&amp;lt;" into "&lt;"
+// and then into "<", so a page that escaped its own markup would come back
+// decoded one level too far.
+const TITLE_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+};
+
 function titleFromHtml(html: string): string {
   const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim();
   return title
-    ? title
-        .replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
+    ? title.replace(/&(?:amp|lt|gt|quot|#39);/g, (entity) => TITLE_ENTITIES[entity] ?? entity)
     : "";
 }
 
