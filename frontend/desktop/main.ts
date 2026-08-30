@@ -590,17 +590,17 @@ async function run(): Promise<void> {
   });
 
   app.on("render-process-gone", (_event, webContents, details) => {
+    log.error(
+      [
+        "App render-process-gone",
+        `reason=${details.reason}`,
+        `exitCode=${details.exitCode}`,
+        `url=${webContents.getURL()}`,
+        `appVersion=${app.getVersion()}`,
+      ].join(" "),
+    );
     void processMemorySummary().then((memory) => {
-      log.error(
-        [
-          "App render-process-gone",
-          `reason=${details.reason}`,
-          `exitCode=${details.exitCode}`,
-          `url=${webContents.getURL()}`,
-          `appVersion=${app.getVersion()}`,
-          memory,
-        ].join(" "),
-      );
+      log.error(`App render-process-gone memory ${memory}`);
     });
   });
 

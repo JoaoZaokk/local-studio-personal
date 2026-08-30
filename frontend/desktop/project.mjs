@@ -918,9 +918,9 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
     LOCAL_STUDIO_DESKTOP_DISABLE_AUTO_UPDATE: "true",
     LOCAL_STUDIO_DESKTOP_USER_DATA_DIR: userData
   });
-  let child, browser;
+  let child, browser, crashed = [];
   try {
-    child = spawn2(executable, [`--remote-debugging-port=${debugPort}`], {
+    child = spawn2(executable, [`--remote-debugging-port=${debugPort}`, "--enable-logging=stderr", "--v=1"], {
       cwd: temp,
       detached: !0,
       env,
@@ -934,6 +934,7 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
       throw Error(`Packaged browser navigated to an unexpected URL: ${JSON.stringify(embeddedBrowser)}`);
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`);
     let page = await waitForPage(browser, origin, 30000);
+    page.on("crash", () => crashed.push(page.url() || origin));
     await page.waitForLoadState("domcontentloaded");
     let agentResponse = await page.goto(`${origin}/agent`, {
       waitUntil: "domcontentloaded",
@@ -965,7 +966,9 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
       stderr.join("").slice(-4000)
     ].filter(Boolean).join(`
 `);
-    throw Error(`${error instanceof Error ? error.message : String(error)}
+    let crashNote = crashed.length ? `
+Renderer crashed while loading ${crashed.join(", ")}; the desktop log below carries reason= and exitCode=.` : "";
+    throw Error(`${error instanceof Error ? error.message : String(error)}${crashNote}
 ${diagnostics}`);
   } finally {
     if (browser)
