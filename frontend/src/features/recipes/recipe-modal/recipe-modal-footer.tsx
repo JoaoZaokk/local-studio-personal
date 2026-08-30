@@ -4,6 +4,7 @@ import { Save } from "@/ui/icon-registry";
 import { Button, Spinner } from "@/ui";
 import { DrawerFooter } from "@/ui/drawer";
 import type { RecipeEditor } from "@/features/recipes/recipe-editor";
+import { recipeValidationIssues } from "@/features/recipes/recipe-validation";
 
 export function RecipeModalFooter({
   recipe,
@@ -20,22 +21,15 @@ export function RecipeModalFooter({
   onClose: () => void;
   onSave: () => void;
 }) {
-  const invalid =
-    Boolean(extraArgsError) ||
-    Boolean(recipeSourceError) ||
-    !recipe.name.trim() ||
-    !recipe.model_path.trim() ||
-    !recipe.runtime?.ref.trim();
+  const issues = recipeValidationIssues(recipe, extraArgsError, recipeSourceError);
+  const invalid = issues.length > 0;
   return (
     <DrawerFooter
       status={
         <>
           {recipe.id ? `Editing ${recipe.name}` : "Creating a Serve"}
-          {extraArgsError ? (
-            <span className="ml-3 text-(--ui-danger)">Extra args has errors</span>
-          ) : null}
-          {recipeSourceError ? (
-            <span className="ml-3 text-(--ui-danger)">Serve JSON has errors</span>
+          {invalid ? (
+            <span className="ml-3 text-(--ui-danger)">Required: {issues.join(", ")}</span>
           ) : null}
         </>
       }
@@ -47,6 +41,7 @@ export function RecipeModalFooter({
         size="sm"
         onClick={onSave}
         disabled={saving || invalid}
+        title={invalid ? `Complete: ${issues.join(", ")}` : undefined}
         icon={saving ? <Spinner size="xs" variant="refresh" /> : <Save className="h-3 w-3" />}
       >
         {saving ? "Saving..." : "Save Serve"}

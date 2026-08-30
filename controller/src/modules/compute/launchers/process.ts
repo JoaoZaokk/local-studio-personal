@@ -42,10 +42,11 @@ export const makeProcessLauncher = (
       closeSync(logFd);
       if (pid <= 0) return yield* spawnFailed(`failed to spawn ${binary}`);
       child.unref();
+      const spawned = processPlatform.inspect(pid);
       return {
         kind: "process",
         pid,
-        startToken: processPlatform.inspect(pid)?.startToken ?? null,
+        startToken: spawned.state === "found" ? spawned.identity.startToken : null,
       } as const;
     }),
 
@@ -58,8 +59,16 @@ export const makeProcessLauncher = (
     Effect.sync(() => {
       if (reference.kind !== "process") return false;
       if (!processPlatform.alive(reference.pid)) return false;
-      const identity = processPlatform.inspect(reference.pid);
-      if (!identity) return false;
+      const lookup = processPlatform.inspect(reference.pid);
+      if (lookup.state === "absent") return false;
+      // Only the Windows arm can report this. Its Win32_Process query was measured at
+      // 40261ms cold under load against a 120s budget, so a timeout is a routine false
+      // negative there, and alive() has already proved the pid exists through
+      // kill(pid, 0), which spawns nothing and cannot time out. POSIX deliberately never
+      // reports it: ps is cheap, so a failure is not evidence either way, and answering
+      // true here would let stop() signal a process group we have not identified.
+      if (lookup.state === "unavailable") return true;
+      const identity = lookup.identity;
       // Start token is decisive where the OS provides one.
       if (reference.startToken !== null) return identity.startToken === reference.startToken;
       // Elsewhere the pid's command line must still carry our unmistakable argument:

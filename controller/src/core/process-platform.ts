@@ -11,9 +11,14 @@ type CommandResult = { status: number | null; stdout: string };
 type CommandRunner = (command: string, args: string[]) => CommandResult;
 type KillProcess = (pid: number, signal?: NodeJS.Signals | 0) => void;
 
+export type ProcessLookup =
+  | { state: "found"; identity: ProcessIdentity }
+  | { state: "absent" }
+  | { state: "unavailable" };
+
 export type ProcessPlatform = {
   alive(pid: number): boolean;
-  inspect(pid: number): ProcessIdentity | null;
+  inspect(pid: number): ProcessLookup;
   list(): ProcessIdentity[];
   terminateTree(pid: number, force: boolean): void;
 };
@@ -25,14 +30,28 @@ type ProcessPlatformOptions = {
   readFile?: (path: string) => string;
 };
 
-const runCommand: CommandRunner = (command, args) => {
-  try {
-    const result = spawnSync(command, args, { encoding: "utf8", windowsHide: true });
-    return { status: result.status, stdout: result.stdout?.trim() ?? "" };
-  } catch {
-    return { status: null, stdout: "" };
-  }
-};
+const POSIX_COMMAND_TIMEOUT_MS = 3_000;
+const WINDOWS_COMMAND_TIMEOUT_MS = 120_000;
+
+export const commandTimeoutMs = (platform: NodeJS.Platform): number =>
+  platform === "win32" ? WINDOWS_COMMAND_TIMEOUT_MS : POSIX_COMMAND_TIMEOUT_MS;
+
+const syncRunner =
+  (timeoutMs: number): CommandRunner =>
+  (command, args) => {
+    try {
+      const result = spawnSync(command, args, {
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: timeoutMs,
+      });
+      return { status: result.status, stdout: result.stdout?.trim() ?? "" };
+    } catch {
+      return { status: null, stdout: "" };
+    }
+  };
+
+const runCommand: CommandRunner = syncRunner(commandTimeoutMs(process.platform));
 
 export const splitProcessCommandLine = (command: string): string[] =>
   (command.match(/(?:[^\s"]+|"[^"]*")+/g) ?? []).map((token) => token.replace(/^"|"$/g, ""));
@@ -84,7 +103,7 @@ const windowsPowerShell = (run: CommandRunner, script: string): CommandResult =>
 
 export const makeProcessPlatform = (options: ProcessPlatformOptions = {}): ProcessPlatform => {
   const platform = options.platform ?? process.platform;
-  const run = options.run ?? runCommand;
+  const run = options.run ?? syncRunner(commandTimeoutMs(platform));
   const kill = options.kill ?? process.kill;
   const readFile = options.readFile ?? ((path: string): string => readFileSync(path, "utf8"));
 
@@ -98,24 +117,38 @@ export const makeProcessPlatform = (options: ProcessPlatformOptions = {}): Proce
     }
   };
 
-  const inspect = (pid: number): ProcessIdentity | null => {
-    if (!Number.isInteger(pid) || pid <= 0) return null;
+  const linuxStartToken = (pid: number): string | null => {
+    if (platform !== "linux") return null;
+    try {
+      const stat = readFile(`/proc/${pid}/stat`);
+      return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const inspect = (pid: number): ProcessLookup => {
+    if (!Number.isInteger(pid) || pid <= 0) return { state: "absent" };
     if (platform === "win32") {
       const script = `Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}' | Select-Object ProcessId,CommandLine,CreationDate | ConvertTo-Json -Compress`;
-      return parseWindowsProcessList(windowsPowerShell(run, script).stdout)[0] ?? null;
+      const result = windowsPowerShell(run, script);
+      if (result.status === null) return { state: "unavailable" };
+      const identity = parseWindowsProcessList(result.stdout)[0];
+      return identity ? { state: "found", identity } : { state: "absent" };
     }
+    const startToken = linuxStartToken(pid);
     const command = run("ps", ["-o", "command=", "-p", String(pid)]);
-    if (command.status !== 0 || !command.stdout) return null;
-    let startToken: string | null = null;
-    if (platform === "linux") {
-      try {
-        const stat = readFile(`/proc/${pid}/stat`);
-        startToken = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? null;
-      } catch {
-        startToken = null;
-      }
+    if (command.status === 0 && command.stdout) {
+      return { state: "found", identity: { pid, commandLine: command.stdout, startToken } };
     }
-    return { pid, commandLine: command.stdout, startToken };
+    if (startToken !== null) {
+      return { state: "found", identity: { pid, commandLine: "", startToken } };
+    }
+    // POSIX never reports "unavailable". `ps -o command= -p <pid>` costs milliseconds
+    // against a three second budget, so a failure here is not the routine false negative
+    // the Windows CIM query is, and the only caller that reads this state answers a
+    // question whose wrong answer signals a process group.
+    return { state: "absent" };
   };
 
   const list = (): ProcessIdentity[] => {

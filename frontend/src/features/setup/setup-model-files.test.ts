@@ -28,4 +28,21 @@ describe("manual GGUF selection", () => {
     assert.equal(preset?.backend, "llamacpp");
     assert.deepEqual(preset?.allow_patterns, ["model-Q1.gguf"]);
   });
+
+  test("groups split GGUF shards into one complete variant", () => {
+    const options = ggufFileOptions({
+      modelId: "org/model",
+      url: "https://huggingface.co/org/model",
+      siblings: [
+        { rfilename: "model-Q4-00001-of-00002.gguf", size: 10 },
+        { rfilename: "model-Q4-00002-of-00002.gguf", size: 20 },
+        { rfilename: "model-Q8.gguf", size: 40 },
+      ],
+    });
+    assert.equal(options.length, 2);
+    assert.deepEqual(options[0]?.allowPatterns, ["model-Q4-*.gguf"]);
+    assert.deepEqual(manualDownloadPreset("org/model", options[0])?.allow_patterns, [
+      "model-Q4-*.gguf",
+    ]);
+  });
 });

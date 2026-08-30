@@ -78,7 +78,7 @@ describe("isManagedServeRuntimeTarget", () => {
       ]).ref,
       "Ubuntu",
     );
-    assert.deepEqual(managedRuntimeBackendsFor([wslTarget]), []);
+    assert.deepEqual(managedRuntimeBackendsFor("linux", [wslTarget]), []);
 
     const available = runtimeOptionsFor("vllm", [
       {
@@ -96,5 +96,11 @@ describe("isManagedServeRuntimeTarget", () => {
     assert.equal(available[0]?.installed, false);
     assert.equal(available[0]?.canInstall, true);
     assert.match(available[0]?.detail ?? "", /install required/);
+  });
+
+  test("does not advertise native managed Python engines on Windows without WSL", () => {
+    assert.deepEqual(managedRuntimeBackendsFor("win32", []), []);
+    assert.deepEqual(managedRuntimeBackendsFor(null, []), []);
+    assert.deepEqual(managedRuntimeBackendsFor("linux", []), ["vllm", "sglang", "mlx"]);
   });
 });

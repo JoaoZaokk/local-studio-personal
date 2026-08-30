@@ -6,6 +6,16 @@ const integerSchema = Schema.Number.check(Schema.isInt());
 
 const nullableStringSchema = Schema.Union([Schema.Null, Schema.String]);
 
+const environmentVariableNameSchema = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^[A-Za-z_][A-Za-z0-9_]*$/)),
+);
+
+const assertEnvironmentVariableNames = (value: unknown): void => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const invalidName = Object.keys(value).find((name) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name));
+  if (invalidName) throw new Error(`Invalid environment variable name: ${invalidName}`);
+};
+
 const serveRuntimeSchema = Schema.Struct({
   kind: Schema.Literals(["managed_venv", "system", "docker", "binary", "wsl2"]),
   ref: Schema.String.check(Schema.isNonEmpty()),
@@ -186,7 +196,10 @@ export const recipeSchema = Schema.Struct({
   vision: Schema.Union([Schema.Null, Schema.Boolean]),
   backend: Schema.Literals(["vllm", "sglang", "llamacpp", "mlx"]),
   runtime: serveRuntimeSchema,
-  env_vars: Schema.Union([Schema.Null, Schema.Record(Schema.String, Schema.String)]),
+  env_vars: Schema.Union([
+    Schema.Null,
+    Schema.Record(environmentVariableNameSchema, Schema.String),
+  ]),
   tensor_parallel_size: integerSchema,
   pipeline_parallel_size: integerSchema,
   max_model_len: integerSchema,
@@ -219,6 +232,7 @@ export const recipeSchema = Schema.Struct({
  */
 export const parseRecipe = (raw: unknown): Recipe => {
   const normalized = normalizeRecipeInput(raw);
+  assertEnvironmentVariableNames(normalized["env_vars"]);
   const parsed = Schema.decodeUnknownSync(recipeSchema, {
     onExcessProperty: "preserve",
   })({

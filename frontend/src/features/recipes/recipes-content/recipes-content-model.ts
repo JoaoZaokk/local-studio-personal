@@ -15,6 +15,7 @@ import { DEFAULT_RECIPE } from "./default-recipe";
 import type { RecipesTableProps } from "./types";
 import { useRecipesDerived } from "./use-recipes-derived";
 import { isRecipeActive } from "./launch-reconciliation";
+import { backendForDownload, modelPathForDownload } from "../recipe-from-download";
 
 export type RecipesContentTab = "picks" | "get" | "serves" | "downloads";
 
@@ -125,12 +126,14 @@ export function useRecipesContentModel() {
   const handleCreateServeFromDownload = useCallback(
     (download: ModelDownload) => {
       const modelName = download.model_id.split("/").filter(Boolean).at(-1) ?? download.model_id;
+      const backend = backendForDownload(download);
       setModalRecipe(
         normalizeRecipeForEditor({
           ...DEFAULT_RECIPE,
-          runtime: preferredRuntimeForBackend("vllm", runtimeTargets),
+          backend,
+          runtime: preferredRuntimeForBackend(backend, runtimeTargets),
           name: modelName,
-          model_path: download.target_dir,
+          model_path: modelPathForDownload(download),
           served_model_name: modelName,
         }),
       );

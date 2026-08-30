@@ -31,6 +31,7 @@
     "check:agent-runtime": "cd services/agent-runtime && bun run check",
     "test:integration": "npm --prefix services/agent-runtime run check",
     "dev:agent-runtime": "npm --prefix services/agent-runtime run build && node services/agent-runtime/dist/server.js",
+    "dev:agent-runtime:watch": "bun --watch services/agent-runtime/src/server.ts",
     "desktop:build": "cd frontend && npm run desktop:build",
     "desktop:dist": "cd frontend && npm run desktop:dist",
     "desktop:pack": "cd frontend && npm run desktop:pack"

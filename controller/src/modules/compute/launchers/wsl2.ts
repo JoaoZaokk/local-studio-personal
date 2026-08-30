@@ -3,11 +3,13 @@ import { closeSync, openSync } from "node:fs";
 import { posix, resolve } from "node:path";
 import { Effect } from "effect";
 import type { HandleReference, InstanceRecord } from "../contracts";
-import { listRunningWslDistributions, runInWsl } from "../wsl-platform";
+import type { AsyncCommandResult } from "../../../core/command";
+import { runInWsl, runningWslDistributions } from "../wsl-platform";
 import { readLogTail, spawnFailed, type Launcher } from "./launcher";
 
 const START_TIMEOUT_MS = 10_000;
 const STOP_POLL_MS = 250;
+const ENVIRONMENT_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const WRAPPER =
   'pid_file=$1; workdir=$2; nonce=$3; log_file=$4; binary_dir=$5; shift 5; if [ -n "$workdir" ]; then cd -- "$workdir" || exit 126; fi; if [ -n "$binary_dir" ]; then PATH="$binary_dir:$PATH"; export PATH; fi; start_token=$(/usr/bin/awk \'{print $22}\' /proc/$$/stat) || exit 126; /usr/bin/printf \'%s %s %s\\n\' "$$" "$start_token" "$nonce" > "$pid_file" || exit 126; exec >> "$log_file" 2>&1; exec "$@"';
 
@@ -20,6 +22,9 @@ interface WslIdentity {
 export const isWindowsAbsolutePath = (value: string): boolean =>
   /^[a-zA-Z]:[\\/]/.test(value) || /^\\\\/.test(value);
 
+export const isEnvironmentVariableName = (value: string): boolean =>
+  ENVIRONMENT_VARIABLE_NAME.test(value);
+
 export const buildWslLaunchArguments = (
   distribution: string,
   pidFile: string,
@@ -28,27 +33,31 @@ export const buildWslLaunchArguments = (
   logFile: string,
   argv: readonly string[],
   env: Readonly<Record<string, string>>,
-): string[] => [
-  "--distribution",
-  distribution,
-  "--exec",
-  "/usr/bin/setsid",
-  "--wait",
-  "/bin/sh",
-  "-c",
-  WRAPPER,
-  "local-studio",
-  pidFile,
-  workdir,
-  nonce,
-  logFile,
-  argv[0]?.includes("/") ? posix.dirname(argv[0]) : "",
-  "/usr/bin/env",
-  ...Object.entries(env)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${key}=${value}`),
-  ...argv,
-];
+): string[] => {
+  const environment = Object.entries(env).sort(([left], [right]) => left.localeCompare(right));
+  const invalidName = environment.find(([key]) => !isEnvironmentVariableName(key))?.[0];
+  if (invalidName) throw new Error(`Invalid environment variable name: ${invalidName}`);
+  return [
+    "--distribution",
+    distribution,
+    "--exec",
+    "/usr/bin/setsid",
+    "--wait",
+    "/bin/sh",
+    "-c",
+    WRAPPER,
+    "local-studio",
+    pidFile,
+    workdir,
+    nonce,
+    logFile,
+    argv[0]?.includes("/") ? posix.dirname(argv[0]) : "",
+    "/usr/bin/env",
+    "--",
+    ...environment.map(([key, value]) => `${key}=${value}`),
+    ...argv,
+  ];
+};
 
 const parseIdentity = (value: string): WslIdentity | null => {
   const match = value.trim().match(/^(\d+)\s+(\S+)\s+(\S+)$/);
@@ -107,27 +116,47 @@ const readIdentity = (distribution: string, pidFile: string): Effect.Effect<WslI
     Effect.map((result) => (result.status === 0 ? parseIdentity(result.stdout) : null)),
   );
 
-const identityAlive = (
+export type Liveness = "alive" | "dead" | "unknown";
+
+const LIVENESS_PROBE =
+  'if test -r "/proc/$1/stat"; then current=$(/usr/bin/awk \'{print $22}\' "/proc/$1/stat"); else current=""; fi; if test -n "$current" && test "$current" = "$2"; then echo alive; else echo dead; fi';
+
+export const readLivenessProbe = (result: AsyncCommandResult): Liveness => {
+  if (result.timedOut || result.status !== 0) return "unknown";
+  const verdict = result.stdout.trim();
+  if (verdict === "alive") return "alive";
+  return verdict === "dead" ? "dead" : "unknown";
+};
+
+const identityLiveness = (
+  reference: Extract<HandleReference, { kind: "wsl2" }>,
+): Effect.Effect<Liveness> =>
+  Effect.gen(function* () {
+    const running = yield* runningWslDistributions();
+    if (running.state === "unavailable") return "unknown";
+    if (!includesDistribution(running.names, reference.distribution)) return "dead";
+    return readLivenessProbe(
+      yield* runInWsl(reference.distribution, [
+        "/bin/sh",
+        "-c",
+        LIVENESS_PROBE,
+        "local-studio",
+        String(reference.pid),
+        reference.startToken,
+      ]),
+    );
+  });
+
+const notConfirmedDead = (
   reference: Extract<HandleReference, { kind: "wsl2" }>,
 ): Effect.Effect<boolean> =>
-  Effect.gen(function* () {
-    const running = yield* listRunningWslDistributions();
-    if (!includesDistribution(running, reference.distribution)) return false;
-    const result = yield* runInWsl(reference.distribution, [
-      "/bin/sh",
-      "-c",
-      'test -r "/proc/$1/stat" || exit 1; current=$(/usr/bin/awk \'{print $22}\' "/proc/$1/stat") || exit 1; test "$current" = "$2"',
-      "local-studio",
-      String(reference.pid),
-      reference.startToken,
-    ]);
-    return result.status === 0;
-  });
+  identityLiveness(reference).pipe(Effect.map((state) => state !== "dead"));
 
 const removePidFile = (distribution: string, pidFile: string): Effect.Effect<void> =>
   Effect.gen(function* () {
-    const running = yield* listRunningWslDistributions();
-    if (!includesDistribution(running, distribution)) return;
+    const running = yield* runningWslDistributions();
+    if (running.state === "unavailable") return;
+    if (!includesDistribution(running.names, distribution)) return;
     yield* runInWsl(distribution, ["/bin/rm", "-f", pidFile]).pipe(Effect.ignore);
   });
 
@@ -258,7 +287,7 @@ export const makeWsl2Launcher = (logPathFor: (record: InstanceRecord) => string)
     }),
 
   alive: (reference) =>
-    reference.kind === "wsl2" ? identityAlive(reference) : Effect.succeed(false),
+    reference.kind === "wsl2" ? notConfirmedDead(reference) : Effect.succeed(false),
 
   owns: (reference, record) =>
     Effect.succeed(reference.kind === "wsl2" && reference.nonce === record.nonce),
@@ -267,7 +296,7 @@ export const makeWsl2Launcher = (logPathFor: (record: InstanceRecord) => string)
     reference.kind !== "wsl2"
       ? Effect.void
       : Effect.gen(function* () {
-          if (yield* identityAlive(reference)) {
+          if (yield* notConfirmedDead(reference)) {
             yield* runInWsl(reference.distribution, [
               "/usr/bin/kill",
               "-TERM",
@@ -275,10 +304,10 @@ export const makeWsl2Launcher = (logPathFor: (record: InstanceRecord) => string)
               `-${reference.pid}`,
             ]).pipe(Effect.ignore);
             const deadline = Date.now() + graceMs;
-            while ((yield* identityAlive(reference)) && Date.now() < deadline) {
+            while ((yield* notConfirmedDead(reference)) && Date.now() < deadline) {
               yield* Effect.sleep(STOP_POLL_MS);
             }
-            if (yield* identityAlive(reference)) {
+            if (yield* notConfirmedDead(reference)) {
               yield* runInWsl(reference.distribution, [
                 "/usr/bin/kill",
                 "-KILL",

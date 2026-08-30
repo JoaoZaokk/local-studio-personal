@@ -1,9 +1,9 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { Effect } from "effect";
 import type { Config } from "../../../config/env";
 import { loadPersistedConfig, savePersistedConfig } from "../../../config/persisted-config";
-import { resolveBinary, runCommandEffect } from "../../../core/command";
+import { isExplicitPath, resolveBinary, runCommandEffect } from "../../../core/command";
 import type { ProcessInfo } from "../../models/types";
 import type {
   EngineBackend,
@@ -217,7 +217,7 @@ const llamacppCandidates = (config: Config): Candidate[] => {
     existsSync(managedBinary) ? managedBinary : undefined,
   ]).map((candidate) => ({
     backend: "llamacpp",
-    kind: isAbsolute(candidate) ? "binary" : "system",
+    kind: isExplicitPath(candidate) ? "binary" : "system",
     source: "configured",
     probe: "binary",
     candidate,

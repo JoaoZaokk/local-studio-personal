@@ -65,20 +65,22 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `PORT=${controllerPort} node ${controllerScript}`,
+      command: `node ${controllerScript}`,
+      env: { PORT: String(controllerPort) },
       url: `http://127.0.0.1:${controllerPort}/health`,
       timeout: 15_000,
       reuseExistingServer: false,
     },
     {
-      command: [
-        `PORT=${frontendPort}`,
-        `HOME=${homeDir}`,
-        `LOCAL_STUDIO_AGENT_RUNTIME_URL=http://127.0.0.1:${runtimePort}`,
-        `LOCAL_STUDIO_DATA_DIR=${dataDir}`,
-        `KITTYLITTER_BIN=${kittylitterBin}`,
-        `node ${projectScript} start`,
-      ].join(" "),
+      command: `node ${projectScript} start`,
+      env: {
+        PORT: String(frontendPort),
+        HOME: homeDir,
+        USERPROFILE: homeDir,
+        LOCAL_STUDIO_AGENT_RUNTIME_URL: `http://127.0.0.1:${runtimePort}`,
+        LOCAL_STUDIO_DATA_DIR: dataDir,
+        KITTYLITTER_BIN: kittylitterBin,
+      },
       url: `${baseURL}/api/desktop-health`,
       timeout: 60_000,
       reuseExistingServer: false,

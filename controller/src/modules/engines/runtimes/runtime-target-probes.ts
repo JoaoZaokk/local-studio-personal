@@ -4,7 +4,7 @@ import { Effect, Schema } from "effect";
 import { coerce, compare } from "semver";
 import { resolveBinary, runCommandAsyncEffect } from "../../../core/command";
 import { realProcessPlatform, splitProcessCommandLine } from "../../../core/process-platform";
-import { VLLM_RUNTIME_COMMAND_TIMEOUT_MS } from "../configs";
+import { RUNNING_PROCESS_PROBE_TIMEOUT_MS, VLLM_RUNTIME_COMMAND_TIMEOUT_MS } from "../configs";
 
 export type PythonProbeBackend = "vllm" | "sglang" | "mlx";
 
@@ -155,10 +155,22 @@ export const probeBackendRuntime = (
   });
 
 export const probeRunningProcessPython = (pid: number): Effect.Effect<string | null> =>
-  Effect.sync(() => {
-    const identity = realProcessPlatform.inspect(pid);
-    return identity ? parseCommandPython(splitProcessCommandLine(identity.commandLine)) : null;
-  });
+  process.platform === "win32"
+    ? Effect.sync(() => {
+        const lookup = realProcessPlatform.inspect(pid);
+        return lookup.state === "found"
+          ? parseCommandPython(splitProcessCommandLine(lookup.identity.commandLine))
+          : null;
+      })
+    : runCommandAsyncEffect("ps", ["-p", String(pid), "-o", "args="], {
+        timeoutMs: RUNNING_PROCESS_PROBE_TIMEOUT_MS,
+      }).pipe(
+        Effect.map((result) =>
+          result.status !== 0 || !result.stdout
+            ? null
+            : parseCommandPython(result.stdout.trim().split(/\s+/)),
+        ),
+      );
 
 const parseLlamaVersion = (output: string): string | null => {
   const match = output.match(/version\s*[:=]\s*(\d+\s*\([^)]+\)|\S+)/i);

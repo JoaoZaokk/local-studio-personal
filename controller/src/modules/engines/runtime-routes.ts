@@ -13,6 +13,7 @@ import {
   listEngineJobs,
 } from "./runtimes/engine-jobs";
 import { getCudaInfo } from "./runtimes/runtime-info";
+import { hostPlatform } from "../compute/devices/host";
 import {
   getDefaultRuntimeTarget,
   getRuntimeTargets,
@@ -66,7 +67,7 @@ export const registerRuntimeRoutes = defineRoutes((app, context) => {
         Effect.gen(function* () {
           const current = yield* getObservedProcess("runtime.targets");
           const targets = yield* getRuntimeTargets(context.config, current);
-          return ctx.json({ targets });
+          return ctx.json({ targets, platform: hostPlatform() });
         }),
       ),
     ),

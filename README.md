@@ -1,5 +1,12 @@
 # Local Studio
 
+> This repository is an independent personal and community edition maintained
+> by [JoaoZaokk](https://github.com/JoaoZaokk). It preserves upstream Local
+> Studio attribution and licensing while developing practical Windows support
+> and other user-focused improvements. It is not the upstream release channel
+> and is not maintained with the expectation that every change will be merged
+> upstream. See [Personal edition](docs/personal-edition.md).
+
 Local Studio is a local-first workstation for running, managing, and using
 self-hosted LLM backends. One machine can launch models, watch GPU/runtime
 state, chat with OpenAI-compatible endpoints, and run agent sessions against
@@ -236,7 +243,6 @@ repository daemon wrapper.
 
 ```bash
 npm run check
-npm run test:integration
 ```
 
 The configured pre-push hook (`.githooks/pre-push`) checks conventional commits
@@ -245,13 +251,12 @@ symlinks to `scripts/project.mjs`; they do not contain separate automation logic
 
 ## Releases
 
-Every successful `main` CI run builds and boots an isolated unsigned macOS app,
-checks the embedded frontend, agent runtime, native desktop bridge, and PTY, and
-keeps the exact-SHA package as a GitHub Actions artifact. Conventional commits
+Every successful `main` CI run builds an unsigned macOS app and keeps the
+exact-SHA package as a GitHub Actions artifact. Conventional commits
 then trigger `release.yml`. Semantic Release chooses the next version (`feat` →
 minor, breaking → major, all other allowed commit types → patch).
 
-The release workflow builds the exact tested revision without Apple credentials,
+The release workflow builds the exact revision without Apple credentials,
 then passes only that unsigned app bundle to a separate signing job. The signing
 job installs the lockfile-pinned signing tooling without lifecycle scripts,
 signs, notarizes and staples the release assets, and hands them to a final
@@ -279,8 +284,7 @@ Local Studio is built with and inspired by exceptional open-source work:
 
 Contributions should be small, focused, and easy to review. Start from the
 latest `dev`, one logical change per branch, no formatting-only rewrites, no
-secrets or build artifacts. Run `npm run check` (and `npm run test:integration` for
-behavior changes) before opening a PR; include a concise summary, the validation
+secrets or build artifacts. Run `npm run check` before opening a PR; include a concise summary, the validation
 commands you ran, and screenshots for UI changes. See AGENTS.md for the full
 code standards an agent (or contributor) must follow.
 
