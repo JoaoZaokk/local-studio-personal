@@ -926,7 +926,7 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
   });
   let child, browser, crashed = [];
   try {
-    child = spawn2(executable, [`--remote-debugging-port=${debugPort}`, "--enable-logging=stderr", "--v=1"], {
+    child = spawn2(executable, [`--remote-debugging-port=${debugPort}`, "--enable-logging=stderr", "--v=1", "--disable-gpu", "--disable-software-rasterizer"], {
       cwd: temp,
       detached: !0,
       env: { ...env, LOCAL_STUDIO_PTY_TRACE: "1" },
