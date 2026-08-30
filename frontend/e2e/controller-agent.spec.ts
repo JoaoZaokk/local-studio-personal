@@ -37,9 +37,9 @@ for (const route of [
 }
 
 for (const [route, destination] of [
-  ["/discover", "/configure?section=models#models"],
+  ["/discover", "/models"],
   ["/integrations", "/configure?section=integrations#integrations"],
-  ["/recipes", "/configure?section=models#models"],
+  ["/recipes", "/models"],
   ["/server", "/configure?section=server#server"],
 ] as const) {
   test(`${route} redirects to ${destination}`, async ({ page }) => {
@@ -73,24 +73,23 @@ test("Pi defaults to the active controller and reveals other models on request",
   await expect(page.getByText("Controller scoped Pi reply.")).toBeVisible({ timeout: 60_000 });
 });
 
-test("messages containing /goal reach Pi as ordinary text", async ({ page }) => {
+test("/goal dispatches as a command, but a mention of it is ordinary text", async ({ page }) => {
   const composer = await openControllerChat(page, "Goal text chat");
   const transcript = page.getByRole("article");
-  const opening = "/goal is ordinary text before the Pi session exists";
-  await composer.fill(opening);
-  await composer.press("Enter");
-  await expect(transcript.getByText(opening, { exact: true })).toBeVisible();
-  await expect(transcript.getByText("Controller scoped Pi reply.")).toBeVisible({
-    timeout: 60_000,
-  });
 
   const embedded = "Please explain what /goal means without running it";
   await composer.fill(embedded);
   await composer.press("Enter");
   await expect(transcript.getByText(embedded, { exact: true })).toBeVisible();
-  await expect(transcript.getByText("Controller scoped Pi reply.")).toHaveCount(2, {
+  await expect(transcript.getByText("Controller scoped Pi reply.")).toBeVisible({
     timeout: 60_000,
   });
+
+  const invocation = "/goal finish the port";
+  await composer.fill(invocation);
+  await composer.press("Enter");
+  await expect(transcript.getByText(invocation, { exact: true })).toHaveCount(0);
+  await expect(transcript.getByText("Controller scoped Pi reply.")).toHaveCount(1);
 });
 
 test("Enter queues while the explicit control steers the active Pi turn", async ({ page }) => {
@@ -139,6 +138,10 @@ test("mobile navigation and composer remain usable at 390px", async ({ page }) =
 });
 
 test("pairing JSON is copyable from laptop and phone web layouts", async ({ context, page }) => {
+  test.skip(
+    process.platform === "win32",
+    "The fixture stands in for a native binary, and execFile on Windows runs neither a shell script nor a .cmd shim.",
+  );
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/settings#profile");
   const copy = page.getByRole("button", { name: "Copy KittyLitter connection JSON" });

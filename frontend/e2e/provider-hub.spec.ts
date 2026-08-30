@@ -12,7 +12,11 @@ async function openModelsTab(page: Page): Promise<void> {
 }
 
 function providerRow(page: Page, name: string) {
-  return page.getByRole("button", { name: new RegExp(`^${name} logo ${name}\\b`) });
+  return page.getByRole("row", { name: new RegExp(`^(?:Connect|Manage) ${name}$`) });
+}
+
+function providerAction(page: Page, name: string) {
+  return providerRow(page, name).getByRole("button", { name: /^(?:Connect|Manage)$/ });
 }
 
 test("configure lists the provider catalog", async ({ page }) => {
@@ -20,14 +24,14 @@ test("configure lists the provider catalog", async ({ page }) => {
   await expect(providerRow(page, "E2E Cloud")).toBeVisible();
   await expect(providerRow(page, "Anthropic")).toBeVisible();
   await expect(providerRow(page, "OpenAI Codex")).toBeVisible();
-  await providerRow(page, "Anthropic").click();
+  await providerAction(page, "Anthropic").click();
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "API key", exact: true })).toBeVisible();
 });
 
 test("signs in to a provider with OAuth in the browser", async ({ page, context }) => {
   await openModelsTab(page);
-  await providerRow(page, "E2E Cloud").click();
+  await providerAction(page, "E2E Cloud").click();
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
   const authLink = page.getByTestId("provider-auth-url");
@@ -72,7 +76,7 @@ test("provider models join the picker and chat streams through the cloud", async
 
 test("signs out of the OAuth provider", async ({ page }) => {
   await openModelsTab(page);
-  await providerRow(page, "E2E Cloud").click();
+  await providerAction(page, "E2E Cloud").click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(providerRow(page, "E2E Cloud")).toContainText("available", { timeout: 15_000 });
 });
@@ -81,7 +85,7 @@ test("connects a builtin provider with an API key", async ({ page }) => {
   await openModelsTab(page);
   const row = providerRow(page, "Fireworks");
   await row.scrollIntoViewIfNeeded();
-  await row.click();
+  await providerAction(page, "Fireworks").click();
   await page.getByRole("button", { name: "API key", exact: true }).click();
 
   const prompt = page.getByTestId("provider-prompt-input");
@@ -94,7 +98,7 @@ test("connects a builtin provider with an API key", async ({ page }) => {
   await expect(providerRow(page, "Fireworks")).toContainText("API key");
 
   await test.step("Sign out again", async () => {
-    await providerRow(page, "Fireworks").click();
+    await providerAction(page, "Fireworks").click();
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(providerRow(page, "Fireworks")).toContainText("available", { timeout: 15_000 });
   });
