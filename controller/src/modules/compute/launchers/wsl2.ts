@@ -3,7 +3,8 @@ import { closeSync, openSync } from "node:fs";
 import { posix, resolve } from "node:path";
 import { Effect } from "effect";
 import type { HandleReference, InstanceRecord } from "../contracts";
-import { listRunningWslDistributions, runInWsl } from "../wsl-platform";
+import type { AsyncCommandResult } from "../../../core/command";
+import { runInWsl, runningWslDistributions } from "../wsl-platform";
 import { readLogTail, spawnFailed, type Launcher } from "./launcher";
 
 const START_TIMEOUT_MS = 10_000;
@@ -115,27 +116,47 @@ const readIdentity = (distribution: string, pidFile: string): Effect.Effect<WslI
     Effect.map((result) => (result.status === 0 ? parseIdentity(result.stdout) : null)),
   );
 
-const identityAlive = (
+export type Liveness = "alive" | "dead" | "unknown";
+
+const LIVENESS_PROBE =
+  'if test -r "/proc/$1/stat"; then current=$(/usr/bin/awk \'{print $22}\' "/proc/$1/stat"); else current=""; fi; if test -n "$current" && test "$current" = "$2"; then echo alive; else echo dead; fi';
+
+export const readLivenessProbe = (result: AsyncCommandResult): Liveness => {
+  if (result.timedOut || result.status !== 0) return "unknown";
+  const verdict = result.stdout.trim();
+  if (verdict === "alive") return "alive";
+  return verdict === "dead" ? "dead" : "unknown";
+};
+
+const identityLiveness = (
+  reference: Extract<HandleReference, { kind: "wsl2" }>,
+): Effect.Effect<Liveness> =>
+  Effect.gen(function* () {
+    const running = yield* runningWslDistributions();
+    if (running.state === "unavailable") return "unknown";
+    if (!includesDistribution(running.names, reference.distribution)) return "dead";
+    return readLivenessProbe(
+      yield* runInWsl(reference.distribution, [
+        "/bin/sh",
+        "-c",
+        LIVENESS_PROBE,
+        "local-studio",
+        String(reference.pid),
+        reference.startToken,
+      ]),
+    );
+  });
+
+const notConfirmedDead = (
   reference: Extract<HandleReference, { kind: "wsl2" }>,
 ): Effect.Effect<boolean> =>
-  Effect.gen(function* () {
-    const running = yield* listRunningWslDistributions();
-    if (!includesDistribution(running, reference.distribution)) return false;
-    const result = yield* runInWsl(reference.distribution, [
-      "/bin/sh",
-      "-c",
-      'test -r "/proc/$1/stat" || exit 1; current=$(/usr/bin/awk \'{print $22}\' "/proc/$1/stat") || exit 1; test "$current" = "$2"',
-      "local-studio",
-      String(reference.pid),
-      reference.startToken,
-    ]);
-    return result.status === 0;
-  });
+  identityLiveness(reference).pipe(Effect.map((state) => state !== "dead"));
 
 const removePidFile = (distribution: string, pidFile: string): Effect.Effect<void> =>
   Effect.gen(function* () {
-    const running = yield* listRunningWslDistributions();
-    if (!includesDistribution(running, distribution)) return;
+    const running = yield* runningWslDistributions();
+    if (running.state === "unavailable") return;
+    if (!includesDistribution(running.names, distribution)) return;
     yield* runInWsl(distribution, ["/bin/rm", "-f", pidFile]).pipe(Effect.ignore);
   });
 
@@ -266,7 +287,7 @@ export const makeWsl2Launcher = (logPathFor: (record: InstanceRecord) => string)
     }),
 
   alive: (reference) =>
-    reference.kind === "wsl2" ? identityAlive(reference) : Effect.succeed(false),
+    reference.kind === "wsl2" ? notConfirmedDead(reference) : Effect.succeed(false),
 
   owns: (reference, record) =>
     Effect.succeed(reference.kind === "wsl2" && reference.nonce === record.nonce),
@@ -275,7 +296,7 @@ export const makeWsl2Launcher = (logPathFor: (record: InstanceRecord) => string)
     reference.kind !== "wsl2"
       ? Effect.void
       : Effect.gen(function* () {
-          if (yield* identityAlive(reference)) {
+          if (yield* notConfirmedDead(reference)) {
             yield* runInWsl(reference.distribution, [
               "/usr/bin/kill",
               "-TERM",
@@ -283,10 +304,10 @@ export const makeWsl2Launcher = (logPathFor: (record: InstanceRecord) => string)
               `-${reference.pid}`,
             ]).pipe(Effect.ignore);
             const deadline = Date.now() + graceMs;
-            while ((yield* identityAlive(reference)) && Date.now() < deadline) {
+            while ((yield* notConfirmedDead(reference)) && Date.now() < deadline) {
               yield* Effect.sleep(STOP_POLL_MS);
             }
-            if (yield* identityAlive(reference)) {
+            if (yield* notConfirmedDead(reference)) {
               yield* runInWsl(reference.distribution, [
                 "/usr/bin/kill",
                 "-KILL",
