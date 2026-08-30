@@ -829,18 +829,23 @@ async function waitForPage(browser, origin, timeoutMs) {
 }
 async function smokeTerminal(page, cwd) {
   return page.evaluate(async ({ cwd: terminalCwd, command }) => {
+    let mark = (step) => console.log(`PTY-SMOKE-STEP ${step}`);
+    mark("bridge");
     let bridge = globalThis.localStudioDesktop;
     if (!bridge)
       throw Error("Desktop bridge is unavailable");
+    mark("status");
     let status = await bridge.terminal.status();
     if (!status.available)
       throw Error(status.reason || "PTY is unavailable");
+    mark("open");
     let session = await bridge.terminal.open({
       cwd: terminalCwd,
       cols: 80,
       rows: 24,
       ownerKey: "desktop-package-smoke"
     });
+    mark(`opened replay=${(session.replay || "").length}`);
     return new Promise((resolve3, reject) => {
       let output2 = session.replay || "", timer = setTimeout(() => {
         disposeData(), disposeExit(), reject(Error(`PTY smoke timed out: ${output2}`));
@@ -848,16 +853,17 @@ async function smokeTerminal(page, cwd) {
         if (!output2.includes("LOCAL_STUDIO_PTY_OK"))
           return;
         clearTimeout(timer), disposeData(), disposeExit(), resolve3({ available: !0, output: "LOCAL_STUDIO_PTY_OK" });
-      }, disposeData = bridge.terminal.onData((id, chunk) => {
+      }, seen = 0, disposeData = bridge.terminal.onData((id, chunk) => {
         if (id !== session.id)
           return;
+        if (seen < 3) mark(`data ${++seen} len=${String(chunk).length}`);
         output2 += chunk, finish();
       }), disposeExit = bridge.terminal.onExit((id) => {
         if (id !== session.id)
           return;
         finish();
       });
-      bridge.terminal.write(session.id, command), finish();
+      mark("write"), bridge.terminal.write(session.id, command), finish();
     });
   }, { cwd, command: process2.platform === "win32" ? "Write-Output 'LOCAL_STUDIO_PTY_OK'; exit\r\n" : "printf 'LOCAL_STUDIO_PTY_OK\\n'; exit\n" });
 }
