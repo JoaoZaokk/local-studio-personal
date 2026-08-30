@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode, type RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Spinner } from "@/ui";
 import { ArrowUp, Plus } from "@/ui/icon-registry";
 import type { BrowserBackend } from "@/features/agent/tools/types";
@@ -35,27 +35,6 @@ export function AgentComposerActions({
   onAbortTurn: () => void;
   modelSelector?: ReactNode;
 }) {
-  // An <input type="file"> takes the renderer down on some Windows hosts the moment
-  // it is created (electron/electron#45251), and this one existed only to be clicked.
-  // Mounting it on the first attach keeps every platform's behaviour and stops a page
-  // that nobody asked to attach anything on from paying for it.
-  const [picking, setPicking] = useState(false);
-  const openOnMount = useRef(false);
-  const bindFileInput = (node: HTMLInputElement | null): void => {
-    fileInputRef.current = node;
-    if (!node || !openOnMount.current) return;
-    openOnMount.current = false;
-    node.click();
-  };
-  const openFilePicker = (): void => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-      return;
-    }
-    openOnMount.current = true;
-    setPicking(true);
-  };
-
   const inputHasText = Boolean(input.trim());
   const starting = status === "starting";
   const stopping = status === "stopping";
@@ -67,18 +46,16 @@ export function AgentComposerActions({
 
   return (
     <div className="agent-composer-actions-row flex min-h-9 items-center gap-0.5 bg-transparent px-2 pb-2 pt-0 text-xs">
-      {picking ? (
-        <input
-          ref={bindFileInput}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(event) => onAttachFiles(event.currentTarget.files)}
-        />
-      ) : null}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(event) => onAttachFiles(event.currentTarget.files)}
+      />
       <button
         type="button"
-        onClick={openFilePicker}
+        onClick={() => fileInputRef.current?.click()}
         disabled={readingAttachments || running}
         className="inline-flex !h-7 !min-h-7 !w-7 !min-w-7 shrink-0 items-center justify-center rounded-full text-(--hl2) hover:bg-(--hover) hover:text-(--fg) disabled:opacity-30"
         aria-label="Attach files"
