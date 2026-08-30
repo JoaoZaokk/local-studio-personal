@@ -827,21 +827,8 @@ async function waitForPage(browser, origin, timeoutMs) {
   }
   throw Error(`Timed out waiting for Electron page at ${origin}`);
 }
-async function evaluateSettled(page, body, arg) {
-  let lastError;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      return await page.evaluate(body, arg);
-    } catch (error) {
-      if (!String(error?.message ?? "").includes("Execution context was destroyed")) throw error;
-      lastError = error;
-      await page.waitForLoadState("domcontentloaded");
-    }
-  }
-  throw lastError;
-}
 async function smokeTerminal(page, cwd) {
-  return evaluateSettled(page, async ({ cwd: terminalCwd, command }) => {
+  return page.evaluate(async ({ cwd: terminalCwd, command }) => {
     let bridge = globalThis.localStudioDesktop;
     if (!bridge)
       throw Error("Desktop bridge is unavailable");
@@ -931,7 +918,7 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
     LOCAL_STUDIO_DESKTOP_DISABLE_AUTO_UPDATE: "true",
     LOCAL_STUDIO_DESKTOP_USER_DATA_DIR: userData
   });
-  let child, browser;
+  let child, browser, crashed = [];
   try {
     child = spawn2(executable, [`--remote-debugging-port=${debugPort}`], {
       cwd: temp,
@@ -947,6 +934,7 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
       throw Error(`Packaged browser navigated to an unexpected URL: ${JSON.stringify(embeddedBrowser)}`);
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`);
     let page = await waitForPage(browser, origin, 30000);
+    page.on("crash", () => crashed.push(page.url() || origin));
     await page.waitForLoadState("domcontentloaded");
     let agentResponse = await page.goto(`${origin}/agent`, {
       waitUntil: "domcontentloaded",
@@ -954,7 +942,7 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
     });
     if (!agentResponse?.ok())
       throw Error(`Agent route returned ${agentResponse?.status() ?? "no response"}`);
-    let runtime = await evaluateSettled(page, async () => {
+    let runtime = await page.evaluate(async () => {
       if (!globalThis.localStudioDesktop)
         throw Error("Desktop bridge is unavailable");
       return globalThis.localStudioDesktop.getRuntime();
@@ -978,7 +966,9 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
       stderr.join("").slice(-4000)
     ].filter(Boolean).join(`
 `);
-    throw Error(`${error instanceof Error ? error.message : String(error)}
+    let crashNote = crashed.length ? `
+Renderer crashed while loading ${crashed.join(", ")}; the desktop log below carries reason= and exitCode=.` : "";
+    throw Error(`${error instanceof Error ? error.message : String(error)}${crashNote}
 ${diagnostics}`);
   } finally {
     if (browser)
