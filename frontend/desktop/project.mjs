@@ -827,8 +827,21 @@ async function waitForPage(browser, origin, timeoutMs) {
   }
   throw Error(`Timed out waiting for Electron page at ${origin}`);
 }
+async function evaluateSettled(page, body, arg) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await page.evaluate(body, arg);
+    } catch (error) {
+      if (!String(error?.message ?? "").includes("Execution context was destroyed")) throw error;
+      lastError = error;
+      await page.waitForLoadState("domcontentloaded");
+    }
+  }
+  throw lastError;
+}
 async function smokeTerminal(page, cwd) {
-  return page.evaluate(async ({ cwd: terminalCwd, command }) => {
+  return evaluateSettled(page, async ({ cwd: terminalCwd, command }) => {
     let bridge = globalThis.localStudioDesktop;
     if (!bridge)
       throw Error("Desktop bridge is unavailable");
@@ -941,7 +954,7 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
     });
     if (!agentResponse?.ok())
       throw Error(`Agent route returned ${agentResponse?.status() ?? "no response"}`);
-    let runtime = await page.evaluate(async () => {
+    let runtime = await evaluateSettled(page, async () => {
       if (!globalThis.localStudioDesktop)
         throw Error("Desktop bridge is unavailable");
       return globalThis.localStudioDesktop.getRuntime();
