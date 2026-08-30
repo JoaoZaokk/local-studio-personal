@@ -955,6 +955,9 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
     });
     if (expectedVersion && runtime.appVersion !== expectedVersion)
       throw Error(`Packaged app version ${runtime.appVersion} does not match ${expectedVersion}`);
+    await page.evaluate(() => console.log("PTY-SMOKE-STEP idle-start"));
+    await page.waitForTimeout(2e4);
+    await page.evaluate(() => console.log("PTY-SMOKE-STEP idle-end"));
     let terminal = await smokeTerminal(page, temp), result = {
       appPath,
       agentStatus: agentResponse.status(),
