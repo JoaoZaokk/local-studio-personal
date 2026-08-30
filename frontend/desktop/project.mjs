@@ -926,7 +926,7 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
   });
   let child, browser, crashed = [];
   try {
-    child = spawn2(executable, [`--remote-debugging-port=${debugPort}`, "--enable-logging=stderr", "--v=1", "--disable-gpu", "--disable-software-rasterizer"], {
+    child = spawn2(executable, [`--remote-debugging-port=${debugPort}`, "--enable-logging=stderr", "--v=1"], {
       cwd: temp,
       detached: !0,
       env: { ...env, LOCAL_STUDIO_PTY_TRACE: "1" },
@@ -942,10 +942,15 @@ async function runDesktopPackageSmoke(args2 = process2.argv.slice(2)) {
     let page = await waitForPage(browser, origin, 30000);
     page.on("crash", () => crashed.push(page.url() || origin));
     await page.waitForLoadState("domcontentloaded");
+    await page.goto(`${origin}/`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.evaluate(() => console.log("PTY-SMOKE-STEP root-loaded"));
+    await page.waitForTimeout(15000);
+    await page.evaluate(() => console.log("PTY-SMOKE-STEP root-survived"));
     let agentResponse = await page.goto(`${origin}/agent`, {
       waitUntil: "domcontentloaded",
       timeout: 30000
     });
+    await page.evaluate(() => console.log("PTY-SMOKE-STEP agent-loaded"));
     if (!agentResponse?.ok())
       throw Error(`Agent route returned ${agentResponse?.status() ?? "no response"}`);
     let runtime = await page.evaluate(async () => {
