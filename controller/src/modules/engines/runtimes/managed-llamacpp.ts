@@ -50,13 +50,13 @@ export const publishedDigest = (asset: GithubAsset): string | null => {
   return match?.[1] ?? null;
 };
 
-const sha256OfFile = (target: string): Promise<string | null> =>
-  new Promise((settle) => {
+const sha256OfFile = (target: string): Effect.Effect<string | null> =>
+  Effect.callback<string | null>((resume) => {
     const hash = createHash("sha256");
     const stream = createReadStream(target);
-    stream.on("error", () => settle(null));
+    stream.on("error", () => resume(Effect.succeed(null)));
     stream.on("data", (chunk) => hash.update(chunk));
-    stream.on("end", () => settle(hash.digest("hex")));
+    stream.on("end", () => resume(Effect.succeed(hash.digest("hex"))));
   });
 
 export const selectWindowsLlamacppAssets = (
@@ -192,7 +192,7 @@ const installManagedLlamacppWindows = (
           used_command: "GitHub release lookup",
         };
       }
-      const actual = yield* Effect.promise(() => sha256OfFile(archive));
+      const actual = yield* sha256OfFile(archive);
       if (actual !== expected) {
         rmSync(staging, { recursive: true, force: true });
         return {
